@@ -1,0 +1,52 @@
+name: "Setup kam"
+description: "Install Rust Cargo environment and the latest version of kam with version-aware caching"
+inputs:
+  github-token:
+    description: "GitHub Token for cache and rate limit enhancement"
+    required: false
+    default: ${{ github.token }}
+runs:
+  using: "composite"
+  steps:
+    - name: Install Rust (with Cargo)
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+        profile: minimal
+
+    - name: Fetch latest kam version (for cache key)
+      id: get-kam-version
+      shell: bash
+      run: |
+        # Fetch latest version from crates.io API (avoids local cache bias)
+        LATEST_VERSION=$(curl -s https://crates.io/api/v1/crates/kam | jq -r '.crate.max_version')
+        echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+        echo "Fetched latest kam version: $LATEST_VERSION"
+
+    - name: Cache kam (version-specific)
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          ~/.cargo/bin/kam  # Cache only kam binary (targeted caching)
+        # Cache key includes kam version + OS + Rust toolchain hash
+        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('~/.cargo/.crates.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
+        enable-cache: "true"
+
+    - name: Install latest kam (if not cached)
+      shell: bash
+      run: |
+        # Skip installation if kam exists and matches latest version
+        if command -v kam &> /dev/null; then
+          INSTALLED_VERSION=$(kam --version | awk '{print $2}')
+          if [ "$INSTALLED_VERSION" = "${{ steps.get-kam-version.outputs.latest_version }}" ]; then
+            echo "kam $INSTALLED_VERSION already installed (matches latest) - skipping installation"
+            exit 0
+          fi
+          echo "Installed kam version $INSTALLED_VERSION is outdated - reinstalling latest"
+        fi
+        cargo install --force kam
+        kam --version
