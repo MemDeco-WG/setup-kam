@@ -1,6 +1,12 @@
+
 Setup kam
  
 A GitHub Action to install the latest version of kam (a Rust-based tool) with version-aware caching and Rust Cargo environment setup.
+ 
+Changelog
+ 
+- v1.1: Updated GitHub Marketplace branding (icon:  activity , color:  purple ) - no functional changes.
+- v1: Initial release (core functionality: Rust + kam installation + version-aware caching).
  
 Features
  
@@ -9,6 +15,7 @@ Features
 - Caches the kam binary and Cargo dependencies to avoid redundant builds
 - Skips installation if the latest version is already cached
 - Cross-platform compatible (Linux, macOS, Windows)
+- GitHub Marketplace branding (activity icon + purple color)
  
 Usage
  
@@ -29,9 +36,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Setup kam (installs Cargo + latest kam with caching)
+      # Setup kam (v1.1 - with activity icon + purple branding)
       - name: Setup kam
-        uses: your-username/setup-kam@v1  # Replace with your GitHub repo URL and version
+        uses: MemDeco-WG/setup-kam@v1.1  # Use v1.1 for latest branding update
 
       # Verify installation and run kam commands
       - name: Verify kam installation
@@ -60,8 +67,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup kam (latest version + cache)
-        uses: your-username/setup-kam@v1
+      - name: Setup kam (latest version + cache + branding)
+        uses: MemDeco-WG/setup-kam@v1.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}  # Optional: Auto-injected by default
 
@@ -97,4 +104,31 @@ License
  
 This project is licensed under the MIT License - see the LICENSE file for details.
  
+3. Quick Commands to Release v1.1 (Run in Terminal)
+ 
+bash
+  
+
+# 1. Pull latest main branch (ensure you have all changes)
+git pull origin main
+
+# 2. Update action.yml and README.md with the above content, then commit
+git add action.yml README.md
+git commit -m "Release v1.1: Update branding (activity icon + purple color)"
+
+# 3. Create v1.1 tag and push to GitHub
+git tag v1.1
+git push origin v1.1
+
+# 4. (Optional) Create GitHub Release for v1.1
+# Go to your repo → Releases → Draft a new release → Select v1.1 tag → Add release note:
+# "v1.1: Updated GitHub Marketplace branding (icon: activity, color: purple) - no functional changes."
  
+ 
+Key Notes
+ 
+- Users can now use  uses: MemDeco-WG/setup-kam@v1.1  to get the branded version (v1 remains unchanged for backward compatibility).
+- The changelog in README.md clarifies the v1.1 update (no functional changes, only branding).
+- The GitHub Release (optional but recommended) helps users track updates.
+ 
+Need help drafting the GitHub Release note or verifying the tag after pushing?
