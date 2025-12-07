@@ -1,5 +1,9 @@
 name: "Setup kam"
 description: "Install Rust Cargo environment and the latest version of kam with version-aware caching"
+# Branding labels (activity icon + purple color) - v1.1 update
+branding:
+  icon: "activity"
+  color: "purple"
 inputs:
   github-token:
     description: "GitHub Token for cache and rate limit enhancement"
@@ -18,7 +22,6 @@ runs:
       id: get-kam-version
       shell: bash
       run: |
-        # Fetch latest version from crates.io API (avoids local cache bias)
         LATEST_VERSION=$(curl -s https://crates.io/api/v1/crates/kam | jq -r '.crate.max_version')
         echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
         echo "Fetched latest kam version: $LATEST_VERSION"
@@ -29,8 +32,7 @@ runs:
         path: |
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
-          ~/.cargo/bin/kam  # Cache only kam binary (targeted caching)
-        # Cache key includes kam version + OS + Rust toolchain hash
+          ~/.cargo/bin/kam
         key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('~/.cargo/.crates.toml') }}
         restore-keys: |
           ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
@@ -39,7 +41,6 @@ runs:
     - name: Install latest kam (if not cached)
       shell: bash
       run: |
-        # Skip installation if kam exists and matches latest version
         if command -v kam &> /dev/null; then
           INSTALLED_VERSION=$(kam --version | awk '{print $2}')
           if [ "$INSTALLED_VERSION" = "${{ steps.get-kam-version.outputs.latest_version }}" ]; then
