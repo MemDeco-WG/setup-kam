@@ -25,7 +25,14 @@ runs:
       id: get-kam-version
       shell: bash
       run: |
-        LATEST_VERSION=$(curl -s https://crates.io/api/v1/crates/kam | jq -r '.crate.max_version')
+        set -eu
+        # Use python to parse JSON for cross-platform reliability
+        JSON=$(curl -s https://crates.io/api/v1/crates/kam)
+        LATEST_VERSION=$(printf "%s" "$JSON" | python - <<'PY'
+import json,sys
+print(json.load(sys.stdin)['crate']['max_version'])
+PY
+)
         echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
         echo "Fetched latest kam version: $LATEST_VERSION"
 
@@ -37,7 +44,19 @@ runs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           ~/.cargo/bin/kam
-        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('~/.cargo/.crates.toml') }}
+        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}
+        restore-keys: |
+          ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
+
+    - name: Cache kam (Windows)
+      if: ${{ inputs.enable-cache == 'true' && runner.os == 'Windows' }}
+      uses: actions/cache@v4
+      with:
+        path: |
+          %USERPROFILE%/.cargo/registry/cache
+          %USERPROFILE%/.cargo/git/db
+          %USERPROFILE%/.cargo/bin/kam.exe
+        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}
         restore-keys: |
           ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
 
