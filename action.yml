@@ -1,6 +1,7 @@
 name: "Setup kam"
 description: "Install Rust Cargo environment and the latest version of kam with version-aware caching"
 # Branding labels (activity icon + purple color) - v1.1 update
+# NOTE: 'latest' tag has been updated to point to 'main'
 branding:
   icon: "activity"
   color: "purple"
@@ -29,19 +30,37 @@ runs:
       id: get-kam-version
       shell: bash
       run: |
-        LATEST_VERSION=$(curl -s https://crates.io/api/v1/crates/kam | jq -r '.crate.max_version')
+        set -eu
+        # Use python one-liner to parse JSON (avoids heredoc indentation issues)
+        LATEST_VERSION=$(curl -s https://crates.io/api/v1/crates/kam | python -c "import json,sys; print(json.load(sys.stdin)['crate']['max_version'])")
         echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
         echo "Fetched latest kam version: $LATEST_VERSION"
 
-    - name: Cache kam (version-specific)
-      if: ${{ inputs.enable-cache == 'true' }}
+    - name: Cache kam (Linux/macOS)
+      if: ${{ inputs.enable-cache == 'true' && runner.os != 'Windows' }}
       uses: actions/cache@v4
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       with:
         path: |
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           ~/.cargo/bin/kam
-        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('~/.cargo/.crates.toml') }}
+        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
+
+    - name: Cache kam (Windows)
+      if: ${{ inputs.enable-cache == 'true' && runner.os == 'Windows' }}
+      uses: actions/cache@v4
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      with:
+        path: |
+          %USERPROFILE%/.cargo/registry/cache
+          %USERPROFILE%/.cargo/git/db
+          %USERPROFILE%/.cargo/bin/kam.exe
+        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
 
