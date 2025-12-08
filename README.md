@@ -72,6 +72,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}  # Optional: Auto-injected by default
           enable-cache: 'true'  # Optional: set to 'false' to disable version-aware caching
+          # Optional: import a template from URL (for example: https://example.com/your-template.tgz)
+          template-url: https://example.com/your-template.tgz
 
       - name: List kam commands
         run: kam --help
@@ -81,12 +83,28 @@ jobs:
           # Example: Run kam build (replace with your use case)
           kam build
           # Add other kam commands as needed
+
+      # Optional: run Setup kam and import a template provided by a workflow input
+      # Example (pass workflow_dispatch input `template-url` to the action):
+      # on:
+      #   workflow_dispatch:
+      #     inputs:
+      #       template-url:
+      #         description: 'Template URL'
+      #         required: false
+      #
+      # In job steps:
+      - name: Setup kam (with optional template import)
+        uses: MemDeco-WG/setup-kam@v1.1
+        with:
+          template-url: ${{ github.event.inputs.template-url }}  # Will be ignored if empty
  
  
 Inputs
 
 - `github-token`: GitHub Token for cache optimization and rate limit enhancement (optional). Default: `${{ github.token }}`
 - `enable-cache`: Toggle version-aware caching for kam and Cargo (optional). Default: `'true'` (set to `'false'` to disable caching)
+- `template-url`: Optional URL to a template file (e.g., .tgz or archive) to download and import using `kam tmpl import`. Default: not set
  
 How It Works
  
