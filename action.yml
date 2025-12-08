@@ -1,6 +1,7 @@
 name: "Setup kam"
 description: "Install Rust Cargo environment and the latest version of kam with version-aware caching"
 # Branding labels (activity icon + purple color) - v1.1 update
+# NOTE: 'latest' tag has been updated to point to 'main'
 branding:
   icon: "activity"
   color: "purple"
@@ -41,7 +42,7 @@ runs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           ~/.cargo/bin/kam
-        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}
+        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
 
@@ -55,7 +56,7 @@ runs:
           %USERPROFILE%/.cargo/registry/cache
           %USERPROFILE%/.cargo/git/db
           %USERPROFILE%/.cargo/bin/kam.exe
-        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}
+        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
 
