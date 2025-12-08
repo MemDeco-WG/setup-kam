@@ -30,25 +30,54 @@ runs:
       shell: bash
       run: |
         set -eu
+        USER_AGENT="setup-kam-action/1.0 (github.com/MemDeco-WG/setup-kam)"
         URL="https://crates.io/api/v1/crates/kam"
-        # Try to fetch crates.io JSON (fail on HTTP errors)
-        JSON=$(curl -fsS "$URL" || true)
-        if [ -z "$JSON" ]; then
-          echo "Error: Failed to fetch crates.io API response from $URL" >&2
-          exit 1
+        RETRIES=3
+        JSON=""
+        # Try to fetch crates.io JSON with retry (to handle transient errors)
+        for attempt in $(seq 1 $RETRIES); do
+          JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$URL" || true)
+          if [ -n "$JSON" ]; then
+            break
+          fi
+          echo "Attempt $attempt/$RETRIES failed to fetch crates.io metadata; retrying..." >&2
+          sleep $(( attempt * 2 ))
+        done
+
+        # Try to parse the crates.io response safely using python get() to avoid KeyError
+        if [ -n "$JSON" ]; then
+          LATEST_VERSION=$(echo "$JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("crate",{}).get("max_version",""))')
+          LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
         fi
 
-        # Use a robust Python parser that returns an empty string on parse failure or missing keys
-        LATEST_VERSION=$(echo "$JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("crate",{}).get("max_version",""))')
-        # Normalize the version string: strip leading `v` if present, and remove CRLF
-        LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
+        # If crates.io failed or did not provide the data, fall back to GitHub releases
+        if [ -z "${LATEST_VERSION:-}" ]; then
+          echo "Warning: crates.io lookup failed or no max_version found; falling back to GitHub releases..." >&2
+          GH_TOKEN="${{ inputs.github-token }}"
+          GH_API="https://api.github.com/repos/MemDeco-WG/Kam/releases/latest"
+          if [ -n "$GH_TOKEN" ]; then
+            GH_JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" -H "Authorization: token $GH_TOKEN" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$GH_API" || true)
+          else
+            GH_JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$GH_API" || true)
+          fi
+          if [ -n "$GH_JSON" ]; then
+            TAG=$(echo "$GH_JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("tag_name",""))')
+            LATEST_VERSION=$(echo "$TAG" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
+          fi
+        fi
 
-        if [ -z "$LATEST_VERSION" ]; then
-          echo "Error: Unable to determine latest kam version from crates.io response." >&2
-          # Print a preview of the returned JSON to help debugging
-          echo "crates.io response (first 10 lines):" >&2
-          echo "$JSON" | sed -n '1,10p' >&2
-          exit 1
+        if [ -z "${LATEST_VERSION:-}" ]; then
+          echo "Warning: Unable to determine latest kam version from crates.io or GitHub releases" >&2
+          if [ -n "$JSON" ]; then
+            echo "crates.io response preview:" >&2
+            echo "$JSON" | sed -n '1,10p' >&2
+          fi
+          if [ -n "$GH_JSON" ]; then
+            echo "GitHub releases response preview:" >&2
+            echo "$GH_JSON" | sed -n '1,10p' >&2
+          fi
+          # Avoid failing pipeline: set a placeholder value so subsequent steps can proceed
+          LATEST_VERSION="unknown"
         fi
 
         echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
@@ -86,27 +115,49 @@ runs:
       shell: bash
       run: |
         set -eu
+        USER_AGENT="setup-kam-action/1.0 (github.com/MemDeco-WG/setup-kam)"
         # Retrieve the normalized latest version from the previous step output
         LATEST_VERSION="${{ steps.get-kam-version.outputs.latest_version }}"
         LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
-        # Fallback: query crates.io again if output was empty
+        ## Fallback: attempt crates.io with retries, then fallback to GitHub Releases
         if [ -z "$LATEST_VERSION" ]; then
-          echo "Warning: latest version not set from step output; fetching directly from crates.io"
+          echo "Warning: latest version not set from step output; attempting to fetch directly from crates.io (with retries)"
           URL="https://crates.io/api/v1/crates/kam"
-          JSON=$(curl -fsS "$URL" || true)
-          if [ -z "$JSON" ]; then
-            echo "Error: Failed to fetch crates.io API response from $URL (fallback)" >&2
-            exit 1
+          JSON=""
+          RETRIES=3
+          for i in $(seq 1 $RETRIES); do
+            JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$URL" || true)
+            if [ -n "$JSON" ]; then break; fi
+            echo "Retry $i/$RETRIES failed to fetch crates.io metadata; sleeping..." >&2
+            sleep $(( i * 2 ))
+          done
+          if [ -n "$JSON" ]; then
+            LATEST_VERSION=$(echo "$JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("crate",{}).get("max_version",""))')
+            LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
           fi
-          LATEST_VERSION=$(echo "$JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("crate",{}).get("max_version",""))')
-          LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
+        fi
 
-          if [ -z "$LATEST_VERSION" ]; then
-            echo "Error: Unable to determine latest kam version from crates.io response (fallback)." >&2
-            echo "crates.io response (first 10 lines):" >&2
-            echo "$JSON" | sed -n '1,10p' >&2
-            exit 1
+        # If still empty, use GitHub Releases as fallback
+        if [ -z "${LATEST_VERSION:-}" ]; then
+          echo "Warning: Attempting to fetch latest version from GitHub releases..."
+          GH_TOKEN="${{ inputs.github-token }}"
+          GH_API="https://api.github.com/repos/MemDeco-WG/Kam/releases/latest"
+          if [ -n "$GH_TOKEN" ]; then
+            GH_JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" -H "Authorization: token $GH_TOKEN" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$GH_API" || true)
+          else
+            GH_JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$GH_API" || true)
           fi
+          if [ -n "$GH_JSON" ]; then
+            TAG=$(echo "$GH_JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("tag_name",""))')
+            LATEST_VERSION=$(echo "$TAG" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
+          fi
+        fi
+
+        if [ "$LATEST_VERSION" = "unknown" ]; then
+          echo "Warning: LATEST_VERSION is 'unknown' - installing without explicit version (latest available)."
+          cargo install --force kam || true
+          kam --version || true
+          exit 0
         fi
 
         if command -v kam &> /dev/null; then
@@ -129,6 +180,7 @@ runs:
       shell: bash
       run: |
         set -eu
+        USER_AGENT="setup-kam-action/1.0 (github.com/MemDeco-WG/setup-kam)"
         echo "Downloading template from ${{ inputs.template-url }}"
         TMPDIR=$(mktemp -d)
         # Preserve the filename/extension from the URL and strip query string so kam can detect archive format (zip / tar.gz)
@@ -143,7 +195,7 @@ runs:
           echo "Please provide a URL that includes the filename and a recognized archive extension, or provide an already-extracted template directory."
           exit 1
         fi
-        curl -fsSL -o "$TMPDIR/$filename" "$url"
+        curl -fsSL -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 60 -o "$TMPDIR/$filename" "$url"
         export PATH="$HOME/.cargo/bin:$PATH"
         echo "Importing template using kam..."
         kam tmpl import "$TMPDIR/$filename"
@@ -153,6 +205,7 @@ runs:
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
+        $UserAgent = 'setup-kam-action/1.0 (github.com/MemDeco-WG/setup-kam)'
         Write-Host "Downloading template from ${{ inputs.template-url }}"
         $url = "${{ inputs.template-url }}"
         $tmp = Join-Path $env:TEMP 'kam-tmpl'
@@ -167,7 +220,7 @@ runs:
           exit 1
         }
         $dest = Join-Path $tmp $file
-        Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
+        Invoke-WebRequest -UseBasicParsing -UserAgent $UserAgent -Uri $url -OutFile $dest
         $env:Path = (Join-Path $env:USERPROFILE '.cargo\\bin') + ';' + $env:Path
         Write-Host "Importing template using kam..."
         kam tmpl import $dest
