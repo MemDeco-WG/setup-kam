@@ -13,6 +13,10 @@ inputs:
     description: "Toggle to enable caching of kam artifacts (true/false). Default: 'true'"
     required: false
     default: "true"
+  template-url:
+    description: "Optional URL to download and import via 'kam tmpl import'"
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
@@ -54,3 +58,29 @@ runs:
         fi
         cargo install --force kam
         kam --version
+
+    - name: Download and import template (Linux/macOS)
+      if: ${{ inputs.template-url != '' && runner.os != 'Windows' }}
+      shell: bash
+      run: |
+        set -eu
+        echo "Downloading template from ${{ inputs.template-url }}"
+        TMPDIR=$(mktemp -d)
+        curl -fsSL -o "$TMPDIR/tmpl" "${{ inputs.template-url }}"
+        export PATH="$HOME/.cargo/bin:$PATH"
+        echo "Importing template using kam..."
+        kam tmpl import "$TMPDIR/tmpl"
+
+    - name: Download and import template (Windows)
+      if: ${{ inputs.template-url != '' && runner.os == 'Windows' }}
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        Write-Host "Downloading template from ${{ inputs.template-url }}"
+        $tmp = Join-Path $env:TEMP 'kam-tmpl'
+        New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+        $dest = Join-Path $tmp 'tmpl'
+        Invoke-WebRequest -UseBasicParsing -Uri "${{ inputs.template-url }}" -OutFile $dest
+        $env:Path = (Join-Path $env:USERPROFILE '.cargo\\bin') + ';' + $env:Path
+        Write-Host "Importing template using kam..."
+        kam tmpl import $dest
