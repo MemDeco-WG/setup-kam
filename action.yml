@@ -26,19 +26,16 @@ runs:
       shell: bash
       run: |
         set -eu
-        # Use python to parse JSON for cross-platform reliability
-        JSON=$(curl -s https://crates.io/api/v1/crates/kam)
-        LATEST_VERSION=$(printf "%s" "$JSON" | python - <<'PY'
-import json,sys
-print(json.load(sys.stdin)['crate']['max_version'])
-PY
-)
+        # Use python one-liner to parse JSON (avoids heredoc indentation issues)
+        LATEST_VERSION=$(curl -s https://crates.io/api/v1/crates/kam | python -c "import json,sys; print(json.load(sys.stdin)['crate']['max_version'])")
         echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
         echo "Fetched latest kam version: $LATEST_VERSION"
 
-    - name: Cache kam (version-specific)
-      if: ${{ inputs.enable-cache == 'true' }}
+    - name: Cache kam (Linux/macOS)
+      if: ${{ inputs.enable-cache == 'true' && runner.os != 'Windows' }}
       uses: actions/cache@v4
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       with:
         path: |
           ~/.cargo/registry/cache/
@@ -51,6 +48,8 @@ PY
     - name: Cache kam (Windows)
       if: ${{ inputs.enable-cache == 'true' && runner.os == 'Windows' }}
       uses: actions/cache@v4
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       with:
         path: |
           %USERPROFILE%/.cargo/registry/cache
