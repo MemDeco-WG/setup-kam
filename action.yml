@@ -1,7 +1,6 @@
 name: "Setup kam"
 description: "Install Rust Cargo environment and the latest version of kam with version-aware caching"
-# Branding labels (activity icon + purple color) - v1.1 update
-# NOTE: 'latest' tag has been updated to point to 'main'
+
 branding:
   icon: "activity"
   color: "purple"
@@ -33,6 +32,8 @@ runs:
         set -eu
         # Use python one-liner to parse JSON (avoids heredoc indentation issues)
         LATEST_VERSION=$(curl -s https://crates.io/api/v1/crates/kam | python -c "import json,sys; print(json.load(sys.stdin)['crate']['max_version'])")
+        # Normalize the version string: strip leading `v` if present, and remove CRLF
+        LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
         echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
         echo "Fetched latest kam version: $LATEST_VERSION"
 
@@ -67,15 +68,30 @@ runs:
     - name: Install latest kam (if not cached)
       shell: bash
       run: |
+        set -eu
+        # Retrieve the normalized latest version from the previous step output
+        LATEST_VERSION="${{ steps.get-kam-version.outputs.latest_version }}"
+        LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
+        # Fallback: query crates.io again if output was empty
+        if [ -z "$LATEST_VERSION" ]; then
+          echo "Warning: latest version not set from step output; fetching directly from crates.io"
+          LATEST_VERSION=$(curl -s https://crates.io/api/v1/crates/kam | python -c "import json,sys; print(json.load(sys.stdin)['crate']['max_version'])")
+          LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
+        fi
+
         if command -v kam &> /dev/null; then
-          INSTALLED_VERSION=$(kam --version | awk '{print $2}')
-          if [ "$INSTALLED_VERSION" = "${{ steps.get-kam-version.outputs.latest_version }}" ]; then
+          INSTALLED_VERSION=$(kam --version | awk '{print $2}' | sed -E 's/^[vV]//' | tr -d '\r\n')
+          echo "Installed version: '$INSTALLED_VERSION' | Target latest: '$LATEST_VERSION'"
+          if [ "$INSTALLED_VERSION" = "$LATEST_VERSION" ]; then
             echo "kam $INSTALLED_VERSION already installed (matches latest) - skipping installation"
             exit 0
           fi
-          echo "Installed kam version $INSTALLED_VERSION is outdated - reinstalling latest"
+          echo "Installed kam version $INSTALLED_VERSION is outdated - reinstalling latest (target: $LATEST_VERSION)"
+        else
+          echo "kam not found - installing latest: $LATEST_VERSION"
         fi
-        cargo install --force kam
+        # Explicitly install the exact target version to prevent partial/older installs from an out-of-date index
+        cargo install --force --version "$LATEST_VERSION" kam
         kam --version
 
     - name: Download and import template (Linux/macOS)
@@ -85,10 +101,12 @@ runs:
         set -eu
         echo "Downloading template from ${{ inputs.template-url }}"
         TMPDIR=$(mktemp -d)
-        curl -fsSL -o "$TMPDIR/tmpl" "${{ inputs.template-url }}"
+        # Preserve the filename/extension from the URL so kam can detect format (zip / tar.gz)
+        filename=$(basename "${{ inputs.template-url }}")
+        curl -fsSL -o "$TMPDIR/$filename" "${{ inputs.template-url }}"
         export PATH="$HOME/.cargo/bin:$PATH"
         echo "Importing template using kam..."
-        kam tmpl import "$TMPDIR/tmpl"
+        kam tmpl import "$TMPDIR/$filename"
 
     - name: Download and import template (Windows)
       if: ${{ inputs.template-url != '' && runner.os == 'Windows' }}
@@ -96,10 +114,12 @@ runs:
       run: |
         $ErrorActionPreference = 'Stop'
         Write-Host "Downloading template from ${{ inputs.template-url }}"
+        $url = "${{ inputs.template-url }}"
         $tmp = Join-Path $env:TEMP 'kam-tmpl'
         New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-        $dest = Join-Path $tmp 'tmpl'
-        Invoke-WebRequest -UseBasicParsing -Uri "${{ inputs.template-url }}" -OutFile $dest
+        $file = [System.IO.Path]::GetFileName($url)
+        $dest = Join-Path $tmp $file
+        Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $dest
         $env:Path = (Join-Path $env:USERPROFILE '.cargo\\bin') + ';' + $env:Path
         Write-Host "Importing template using kam..."
         kam tmpl import $dest
