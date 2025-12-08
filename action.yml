@@ -31,53 +31,47 @@ runs:
       run: |
         set -eu
         USER_AGENT="setup-kam-action/1.0 (github.com/MemDeco-WG/setup-kam)"
+        # Prefer crates.io as the primary source for versions; fallback to GitHub releases.
         URL="https://crates.io/api/v1/crates/kam"
-        RETRIES=3
-        JSON=""
-        # Try to fetch crates.io JSON with retry (to handle transient errors)
-        for attempt in $(seq 1 $RETRIES); do
-          JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$URL" || true)
-          if [ -n "$JSON" ]; then
-            break
+        TMP_FILE_CRATES=$(mktemp)
+        STATUS=$(curl -sS -w "%{http_code}" -H "User-Agent: $USER_AGENT" -H "Accept: application/json" --retry 3 --retry-delay 2 --max-time 15 -o "$TMP_FILE_CRATES" "$URL" 2>/dev/null || echo "000")
+        CRATES_JSON=$(cat "$TMP_FILE_CRATES" || true)
+        rm -f "$TMP_FILE_CRATES" || true
+        if [ "$STATUS" = "200" ] && [ -n "$CRATES_JSON" ]; then
+          PYTHON_BIN=$(command -v python || command -v python3 || true)
+          if [ -n "$PYTHON_BIN" ]; then
+            LATEST_VERSION=$(echo "$CRATES_JSON" | $PYTHON_BIN -c 'import json,sys; d=json.load(sys.stdin); print(d.get("crate",{}).get("max_version",""))' || true)
+          else
+            LATEST_VERSION=$(echo "$CRATES_JSON" | sed -n 's/.*"max_version":[[:space:]]*"\([^"]\+\)".*/\1/p' || true)
           fi
-          echo "Attempt $attempt/$RETRIES failed to fetch crates.io metadata; retrying..." >&2
-          sleep $(( attempt * 2 ))
-        done
-
-        # Try to parse the crates.io response safely using python get() to avoid KeyError
-        if [ -n "$JSON" ]; then
-          LATEST_VERSION=$(echo "$JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("crate",{}).get("max_version",""))')
           LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
-        fi
-
-        # If crates.io failed or did not provide the data, fall back to GitHub releases
-        if [ -z "${LATEST_VERSION:-}" ]; then
-          echo "Warning: crates.io lookup failed or no max_version found; falling back to GitHub releases..." >&2
+        else
+          echo "crates.io lookup returned HTTP $STATUS; response preview:" >&2
+          echo "$CRATES_JSON" | sed -n '1,10p' >&2 || true
+          # Fallback to GitHub releases
           GH_TOKEN="${{ inputs.github-token }}"
           GH_API="https://api.github.com/repos/MemDeco-WG/Kam/releases/latest"
+          TMP_FILE_GH=$(mktemp)
           if [ -n "$GH_TOKEN" ]; then
-            GH_JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" -H "Authorization: token $GH_TOKEN" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$GH_API" || true)
+            GH_STATUS=$(curl -sS -w "%{http_code}" -H "User-Agent: $USER_AGENT" -H "Authorization: token $GH_TOKEN" --retry 3 --retry-delay 2 --max-time 15 -o "$TMP_FILE_GH" "$GH_API" 2>/dev/null || echo "000")
           else
-            GH_JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$GH_API" || true)
+            GH_STATUS=$(curl -sS -w "%{http_code}" -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --max-time 15 -o "$TMP_FILE_GH" "$GH_API" 2>/dev/null || echo "000")
           fi
-          if [ -n "$GH_JSON" ]; then
-            TAG=$(echo "$GH_JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("tag_name",""))')
+          GH_JSON=$(cat "$TMP_FILE_GH" || true)
+          rm -f "$TMP_FILE_GH" || true
+          if [ "$GH_STATUS" = "200" ] && [ -n "$GH_JSON" ]; then
+            PYTHON_BIN=$(command -v python || command -v python3 || true)
+            if [ -n "$PYTHON_BIN" ]; then
+              TAG=$(echo "$GH_JSON" | $PYTHON_BIN -c 'import json,sys; d=json.load(sys.stdin); print(d.get("tag_name",""))' || true)
+            else
+              TAG=$(echo "$GH_JSON" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]\+\)".*/\1/p' || true)
+            fi
             LATEST_VERSION=$(echo "$TAG" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
+          else
+            echo "GitHub releases lookup failed with HTTP $GH_STATUS; response preview:" >&2
+            echo "$GH_JSON" | sed -n '1,10p' >&2 || true
+            LATEST_VERSION="unknown"
           fi
-        fi
-
-        if [ -z "${LATEST_VERSION:-}" ]; then
-          echo "Warning: Unable to determine latest kam version from crates.io or GitHub releases" >&2
-          if [ -n "$JSON" ]; then
-            echo "crates.io response preview:" >&2
-            echo "$JSON" | sed -n '1,10p' >&2
-          fi
-          if [ -n "$GH_JSON" ]; then
-            echo "GitHub releases response preview:" >&2
-            echo "$GH_JSON" | sed -n '1,10p' >&2
-          fi
-          # Avoid failing pipeline: set a placeholder value so subsequent steps can proceed
-          LATEST_VERSION="unknown"
         fi
 
         echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
@@ -111,69 +105,49 @@ runs:
         restore-keys: |
           ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
 
-    - name: Install latest kam (if not cached)
+    - name: Check installed kam version and decide whether to install
+      id: check-kam
       shell: bash
       run: |
         set -eu
-        USER_AGENT="setup-kam-action/1.0 (github.com/MemDeco-WG/setup-kam)"
-        # Retrieve the normalized latest version from the previous step output
         LATEST_VERSION="${{ steps.get-kam-version.outputs.latest_version }}"
         LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
-        ## Fallback: attempt crates.io with retries, then fallback to GitHub Releases
-        if [ -z "$LATEST_VERSION" ]; then
-          echo "Warning: latest version not set from step output; attempting to fetch directly from crates.io (with retries)"
-          URL="https://crates.io/api/v1/crates/kam"
-          JSON=""
-          RETRIES=3
-          for i in $(seq 1 $RETRIES); do
-            JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$URL" || true)
-            if [ -n "$JSON" ]; then break; fi
-            echo "Retry $i/$RETRIES failed to fetch crates.io metadata; sleeping..." >&2
-            sleep $(( i * 2 ))
-          done
-          if [ -n "$JSON" ]; then
-            LATEST_VERSION=$(echo "$JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("crate",{}).get("max_version",""))')
-            LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
-          fi
-        fi
 
-        # If still empty, use GitHub Releases as fallback
-        if [ -z "${LATEST_VERSION:-}" ]; then
-          echo "Warning: Attempting to fetch latest version from GitHub releases..."
-          GH_TOKEN="${{ inputs.github-token }}"
-          GH_API="https://api.github.com/repos/MemDeco-WG/Kam/releases/latest"
-          if [ -n "$GH_TOKEN" ]; then
-            GH_JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" -H "Authorization: token $GH_TOKEN" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$GH_API" || true)
-          else
-            GH_JSON=$(curl -fsS -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 15 "$GH_API" || true)
-          fi
-          if [ -n "$GH_JSON" ]; then
-            TAG=$(echo "$GH_JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("tag_name",""))')
-            LATEST_VERSION=$(echo "$TAG" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
-          fi
-        fi
-
-        if [ "$LATEST_VERSION" = "unknown" ]; then
-          echo "Warning: LATEST_VERSION is 'unknown' - installing without explicit version (latest available)."
-          cargo install --force kam || true
-          kam --version || true
-          exit 0
-        fi
-
+        INSTALLED_VERSION=""
         if command -v kam &> /dev/null; then
-          INSTALLED_VERSION=$(kam --version | awk '{print $2}' | sed -E 's/^[vV]//' | tr -d '\r\n')
-          echo "Installed version: '$INSTALLED_VERSION' | Target latest: '$LATEST_VERSION'"
-          if [ "$INSTALLED_VERSION" = "$LATEST_VERSION" ]; then
-            echo "kam $INSTALLED_VERSION already installed (matches latest) - skipping installation"
-            exit 0
-          fi
-          echo "Installed kam version $INSTALLED_VERSION is outdated - reinstalling latest (target: $LATEST_VERSION)"
-        else
-          echo "kam not found - installing latest: $LATEST_VERSION"
+          INSTALLED_VERSION=$(kam --version 2>/dev/null | awk '{print $2}' | sed -E 's/^[vV]//' | tr -d '\r\n') || true
         fi
-        # Explicitly install the exact target version to prevent partial/older installs from an out-of-date index
-        cargo install --force --version "$LATEST_VERSION" kam
-        kam --version
+        echo "installed_version=$INSTALLED_VERSION" >> $GITHUB_OUTPUT
+
+        if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "unknown" ]; then
+          # If we don't know the target version, only install if nothing is installed.
+          if [ -z "$INSTALLED_VERSION" ]; then
+            echo "should_install=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_install=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          # If we have a target version, install if installed version does not match.
+          if [ "$INSTALLED_VERSION" = "$LATEST_VERSION" ]; then
+            echo "should_install=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_install=true" >> $GITHUB_OUTPUT
+          fi
+        fi
+
+    - name: Install latest kam (explicit version via actions-rs/cargo)
+      if: ${{ steps.check-kam.outputs.should_install == 'true' && steps.get-kam-version.outputs.latest_version != 'unknown' }}
+      uses: actions-rs/cargo@v1
+      with:
+        command: install
+        args: --force --version ${{ steps.get-kam-version.outputs.latest_version }} kam
+
+    - name: Install latest kam (no explicit version via actions-rs/cargo)
+      if: ${{ steps.check-kam.outputs.should_install == 'true' && steps.get-kam-version.outputs.latest_version == 'unknown' }}
+      uses: actions-rs/cargo@v1
+      with:
+        command: install
+        args: --force kam
 
     - name: Download and import template (Linux/macOS)
       if: ${{ inputs.template-url != '' && runner.os != 'Windows' }}
@@ -195,7 +169,13 @@ runs:
           echo "Please provide a URL that includes the filename and a recognized archive extension, or provide an already-extracted template directory."
           exit 1
         fi
-        curl -fsSL -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 60 -o "$TMPDIR/$filename" "$url"
+        TMP_FILE=$(mktemp)
+        STATUS=$(curl -sSL -w "%{http_code}" -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 60 -o "$TMPDIR/$filename" "$url" 2>/dev/null || echo "000")
+        if [ "$STATUS" != "200" ]; then
+          echo "Template download returned HTTP $STATUS; response preview (first 1K):" >&2
+          head -c 1024 "$TMPDIR/$filename" | sed -n '1,20p' >&2 || true
+          exit 1
+        fi
         export PATH="$HOME/.cargo/bin:$PATH"
         echo "Importing template using kam..."
         kam tmpl import "$TMPDIR/$filename"
