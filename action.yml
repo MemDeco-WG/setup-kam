@@ -30,10 +30,27 @@ runs:
       shell: bash
       run: |
         set -eu
-        # Use python one-liner to parse JSON (avoids heredoc indentation issues)
-        LATEST_VERSION=$(curl -s https://crates.io/api/v1/crates/kam | python -c "import json,sys; print(json.load(sys.stdin)['crate']['max_version'])")
+        URL="https://crates.io/api/v1/crates/kam"
+        # Try to fetch crates.io JSON (fail on HTTP errors)
+        JSON=$(curl -fsS "$URL" || true)
+        if [ -z "$JSON" ]; then
+          echo "Error: Failed to fetch crates.io API response from $URL" >&2
+          exit 1
+        fi
+
+        # Use a robust Python parser that returns an empty string on parse failure or missing keys
+        LATEST_VERSION=$(echo "$JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("crate",{}).get("max_version",""))')
         # Normalize the version string: strip leading `v` if present, and remove CRLF
         LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
+
+        if [ -z "$LATEST_VERSION" ]; then
+          echo "Error: Unable to determine latest kam version from crates.io response." >&2
+          # Print a preview of the returned JSON to help debugging
+          echo "crates.io response (first 10 lines):" >&2
+          echo "$JSON" | sed -n '1,10p' >&2
+          exit 1
+        fi
+
         echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
         echo "Fetched latest kam version: $LATEST_VERSION"
 
@@ -75,8 +92,21 @@ runs:
         # Fallback: query crates.io again if output was empty
         if [ -z "$LATEST_VERSION" ]; then
           echo "Warning: latest version not set from step output; fetching directly from crates.io"
-          LATEST_VERSION=$(curl -s https://crates.io/api/v1/crates/kam | python -c "import json,sys; print(json.load(sys.stdin)['crate']['max_version'])")
+          URL="https://crates.io/api/v1/crates/kam"
+          JSON=$(curl -fsS "$URL" || true)
+          if [ -z "$JSON" ]; then
+            echo "Error: Failed to fetch crates.io API response from $URL (fallback)" >&2
+            exit 1
+          fi
+          LATEST_VERSION=$(echo "$JSON" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("crate",{}).get("max_version",""))')
           LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
+
+          if [ -z "$LATEST_VERSION" ]; then
+            echo "Error: Unable to determine latest kam version from crates.io response (fallback)." >&2
+            echo "crates.io response (first 10 lines):" >&2
+            echo "$JSON" | sed -n '1,10p' >&2
+            exit 1
+          fi
         fi
 
         if command -v kam &> /dev/null; then
