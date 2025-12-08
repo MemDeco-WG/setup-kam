@@ -1,0 +1,41 @@
+name: Update latest tag to main
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Force-update 'latest' tag to main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Ensure we have the latest refs
+          git fetch origin main
+
+          # Option A: push the branch commit as the 'latest' tag on remote
+          git push -f origin main:refs/tags/latest
+
+          # Option B (alternative): create local tag then push
+          # git tag -f latest
+          # git push -f origin latest
+
+          echo "Updated remote 'latest' to point at origin/main"
