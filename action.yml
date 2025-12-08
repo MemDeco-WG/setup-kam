@@ -9,6 +9,10 @@ inputs:
     description: "GitHub Token for cache and rate limit enhancement"
     required: false
     default: ${{ github.token }}
+  enable-cache:
+    description: "Toggle to enable caching of kam artifacts (true/false). Default: 'true'"
+    required: false
+    default: "true"
 runs:
   using: "composite"
   steps:
@@ -16,7 +20,6 @@ runs:
       uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
-        profile: minimal
 
     - name: Fetch latest kam version (for cache key)
       id: get-kam-version
@@ -27,6 +30,7 @@ runs:
         echo "Fetched latest kam version: $LATEST_VERSION"
 
     - name: Cache kam (version-specific)
+      if: ${{ inputs.enable-cache == 'true' }}
       uses: actions/cache@v4
       with:
         path: |
@@ -36,7 +40,6 @@ runs:
         key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('~/.cargo/.crates.toml') }}
         restore-keys: |
           ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
-        enable-cache: "true"
 
     - name: Install latest kam (if not cached)
       shell: bash

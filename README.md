@@ -71,6 +71,7 @@ jobs:
         uses: MemDeco-WG/setup-kam@v1.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}  # Optional: Auto-injected by default
+          enable-cache: 'true'  # Optional: set to 'false' to disable version-aware caching
 
       - name: List kam commands
         run: kam --help
@@ -83,13 +84,13 @@ jobs:
  
  
 Inputs
- 
-Input Name Description Required Default Value 
- github-token  GitHub Token for cache optimization and rate limit enhancement No  ${{ github.token }}  
+
+- `github-token`: GitHub Token for cache optimization and rate limit enhancement (optional). Default: `${{ github.token }}`
+- `enable-cache`: Toggle version-aware caching for kam and Cargo (optional). Default: `'true'` (set to `'false'` to disable caching)
  
 How It Works
  
-1. Install Rust: Uses  dtolnay/rust-toolchain@stable  to install the minimal Rust toolchain (includes Cargo).
+1. Install Rust: Uses dtolnay/rust-toolchain@stable to install the Rust toolchain (includes Cargo).
 2. Fetch Latest kam Version: Queries the crates.io API to get the official latest version of kam.
 3. Version-Aware Caching: Caches the kam binary and Cargo dependencies using a key that includes the kam version, OS, and Rust toolchain hash.
 4. Conditional Installation: Skips installation if the latest version of kam is already cached; reinstalls only if a new version is available.
