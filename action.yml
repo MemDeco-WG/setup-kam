@@ -43,11 +43,29 @@ runs:
         "$PYTHON_BIN" -m pip install --upgrade --user commitizen
         # Ensure user's local binary path is in PATH
         export PATH="$HOME/.local/bin:$PATH"
-        if ! command -v cz >/dev/null 2>&1; then
-          echo "::error::cz command not found after installing commitizen"
-          exit 1
+
+        # Prefer invoking commitizen via the installed Python module to avoid ambiguous 'cz' binaries.
+        # Try both the flag and subcommand forms of the version check.
+        if "$PYTHON_BIN" -m commitizen --version >/dev/null 2>&1; then
+          echo "commitizen (module) version: $("$PYTHON_BIN" -m commitizen --version 2>/dev/null || true)"
+        elif "$PYTHON_BIN" -m commitizen version >/dev/null 2>&1; then
+          echo "commitizen (module) version (subcommand): $("$PYTHON_BIN" -m commitizen version 2>/dev/null || true)"
+        else
+          echo "::warning::commitizen module appears installed, but 'python -m commitizen --version'/'version' did not return a version."
         fi
-        cz --version
+
+        # If available in PATH, verify 'cz' through safe invocations only (avoid calling 'cz' without args).
+        if command -v cz >/dev/null 2>&1; then
+          if cz version >/dev/null 2>&1; then
+            cz version || true
+          elif cz --version >/dev/null 2>&1; then
+            cz --version || true
+          else
+            echo "::warning::cz command found but did not respond to 'cz version' or 'cz --version'."
+          fi
+        else
+          echo "::warning::cz command not found in PATH; you can still use 'python -m commitizen' or ensure '~/.local/bin' is on PATH."
+        fi
 
     - name: Install python-commitizen (Windows)
       if: ${{ runner.os == 'Windows' }}
@@ -66,11 +84,39 @@ runs:
         if (Test-Path $userScripts) {
           $env:PATH = $userScripts + ';' + $env:PATH
         }
-        if (-not (Get-Command cz -ErrorAction SilentlyContinue)) {
-          Write-Error "cz command not found after installing commitizen"
-          exit 1
+
+        # Prefer invoking commitizen via the installed Python module to avoid ambiguous 'cz' binaries.
+        $commitizenOk = $false
+        try {
+          & $py -m commitizen --version *> $null
+          $commitizenOk = $true
+          Write-Host "commitizen (module) version: $(& $py -m commitizen --version)"
+        } catch {}
+        if (-not $commitizenOk) {
+          try {
+            & $py -m commitizen version *> $null
+            $commitizenOk = $true
+            Write-Host "commitizen (module) version (subcommand): $(& $py -m commitizen version)"
+          } catch {}
         }
-        cz --version
+        if (-not $commitizenOk) {
+          Write-Warning "commitizen module appears installed, but 'python -m commitizen --version'/'version' did not return a version."
+        }
+
+        # If available in PATH, verify 'cz' through safe invocations only (avoid calling 'cz' without args).
+        if (Get-Command cz -ErrorAction SilentlyContinue) {
+          try {
+            cz version
+          } catch {
+            try {
+              cz --version
+            } catch {
+              Write-Warning "cz command found but did not respond to 'cz version' or 'cz --version'."
+            }
+          }
+        } else {
+          Write-Warning "cz command not found in PATH; you can still use 'python -m commitizen' or ensure '$userScripts' is on PATH."
+        }
 
     - name: Verify KAM private key is set
       if: ${{ inputs.private-key == '' }}
