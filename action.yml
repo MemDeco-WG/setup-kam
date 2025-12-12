@@ -18,9 +18,8 @@ inputs:
     required: false
     default: ""
   private-key:
-    description: "Private key content (e.g. secrets.KAM_PRIVATE_KEY). If provided, it will be imported into kam keyring (encrypted with random pass) and KAM_SIGN_PASSPHRASE will be exported."
-    required: false
-    default: ""
+    description: "Private key content (e.g. the value of secrets.KAM_PRIVATE_KEY). This input is required; if not provided the action will fail immediately. If you don't yet have a key, please apply at developers.kernelsu.org."
+    required: true
 
 runs:
   using: "composite"
@@ -29,6 +28,57 @@ runs:
       uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
+
+    - name: Install python-commitizen (Linux/macOS)
+      if: ${{ runner.os != 'Windows' }}
+      shell: bash
+      run: |
+        set -eu
+        PYTHON_BIN=$(command -v python || command -v python3 || true)
+        if [ -z "$PYTHON_BIN" ]; then
+          echo "::error::Python interpreter not found; commitizen requires Python. Please use a runner that includes Python or install it."
+          exit 1
+        fi
+        "$PYTHON_BIN" -m pip install --upgrade pip
+        "$PYTHON_BIN" -m pip install --upgrade --user commitizen
+        # Ensure user's local binary path is in PATH
+        export PATH="$HOME/.local/bin:$PATH"
+        if ! command -v cz >/dev/null 2>&1; then
+          echo "::error::cz command not found after installing commitizen"
+          exit 1
+        fi
+        cz --version
+
+    - name: Install python-commitizen (Windows)
+      if: ${{ runner.os == 'Windows' }}
+      shell: pwsh
+      run: |
+        $py = (Get-Command python -ErrorAction SilentlyContinue).Source
+        if (-not $py) {
+          Write-Error "Python interpreter not found; commitizen requires Python. Please use a runner that includes Python or install it."
+          exit 1
+        }
+        & $py -m pip install --upgrade pip
+        & $py -m pip install --upgrade --user commitizen
+        # Discover user base scripts folder and add to PATH
+        $site = (& $py -c 'import site; print(site.USER_BASE)') -replace '\r|\n',''
+        $userScripts = Join-Path $site 'Scripts'
+        if (Test-Path $userScripts) {
+          $env:PATH = $userScripts + ';' + $env:PATH
+        }
+        if (-not (Get-Command cz -ErrorAction SilentlyContinue)) {
+          Write-Error "cz command not found after installing commitizen"
+          exit 1
+        }
+        cz --version
+
+    - name: Verify KAM private key is set
+      if: ${{ inputs.private-key == '' }}
+      shell: bash
+      run: |
+        echo "::error::Missing KAM private key (KAM_PRIVATE_KEY)."
+        echo "请前往 developers.kernelsu.org 申请私钥"
+        exit 1
 
     - name: Fetch latest kam version (for cache key)
       id: get-kam-version
