@@ -8,7 +8,7 @@ inputs:
   github-token:
     description: "GitHub Token for cache and rate limit enhancement"
     required: false
-    default: ${{ github.token }}
+    default: ""
   enable-cache:
     description: "Toggle to enable caching of kam artifacts (true/false). Default: 'true'"
     required: false
@@ -18,7 +18,7 @@ inputs:
     required: false
     default: ""
   private-key:
-    description: "Private key content (e.g. ${{ secrets.KAM_PRIVATE_KEY }}). If provided, it will be imported into kam keyring (encrypted with random pass) and KAM_SIGN_PASSPHRASE will be exported."
+    description: "Private key content (e.g. secrets.KAM_PRIVATE_KEY). If provided, it will be imported into kam keyring (encrypted with random pass) and KAM_SIGN_PASSPHRASE will be exported."
     required: false
     default: ""
 
@@ -54,7 +54,7 @@ runs:
           echo "crates.io lookup returned HTTP $STATUS; response preview:" >&2
           echo "$CRATES_JSON" | sed -n '1,10p' >&2 || true
           # Fallback to GitHub releases
-          GH_TOKEN="${{ inputs.github-token }}"
+          GH_TOKEN="${{ inputs.github-token || env.GITHUB_TOKEN }}"
           GH_API="https://api.github.com/repos/MemDeco-WG/Kam/releases/latest"
           TMP_FILE_GH=$(mktemp)
           if [ -n "$GH_TOKEN" ]; then
@@ -86,7 +86,7 @@ runs:
       if: ${{ inputs.enable-cache == 'true' && runner.os != 'Windows' }}
       uses: actions/cache@v4
       env:
-        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
       with:
         path: |
           ~/.cargo/registry/cache/
@@ -100,7 +100,7 @@ runs:
       if: ${{ inputs.enable-cache == 'true' && runner.os == 'Windows' }}
       uses: actions/cache@v4.3.0
       env:
-        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
       with:
         path: |
           %USERPROFILE%/.cargo/registry/cache
