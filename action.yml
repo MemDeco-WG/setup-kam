@@ -17,6 +17,11 @@ inputs:
     description: "Optional URL to download and import via 'kam tmpl import'"
     required: false
     default: ""
+  private-key:
+    description: "Private key content (e.g. ${{ secrets.KAM_PRIVATE_KEY }}). If provided, it will be imported into kam keyring (encrypted with random pass) and KAM_SIGN_PASSPHRASE will be exported."
+    required: false
+    default: ""
+
 runs:
   using: "composite"
   steps:
@@ -148,6 +153,28 @@ runs:
       with:
         command: install
         args: --force kam
+
+    - name: Import private key to keyring
+      if: ${{ inputs.private-key != '' }}
+      shell: bash
+      run: |
+        set -eu
+        # Generate random passphrase
+        PASS=$(openssl rand -base64 32)
+
+        # Write private key to temp file
+        echo "${{ inputs.private-key }}" > pk.pem
+
+        # Import to kam keyring (encrypted)
+        # Using 'main' as the secret name, as commonly used by kam sign
+        kam secret add main --file pk.pem --password "$PASS" --force-file
+
+        # Cleanup raw key immediately
+        rm -f pk.pem
+
+        # Export passphrase for subsequent steps
+        echo "::add-mask::$PASS"
+        echo "KAM_SIGN_PASSPHRASE=$PASS" >> $GITHUB_ENV
 
     - name: Download and import template
       if: ${{ inputs.template-url != '' }}
