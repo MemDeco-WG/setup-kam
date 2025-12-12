@@ -6,7 +6,7 @@ Install `kam` in your GitHub Actions runner with optional caching and template i
 
 Important
 - This action now requires a KAM private key (`private-key`). If you do not provide `private-key` (e.g. via `secrets.KAM_PRIVATE_KEY`), the action will fail early and print instructions on how to obtain one.
-- This action automatically installs `python-commitizen` (Commitizen) and verifies that the `cz` command is available. If `cz` cannot be installed or made available, the action will fail.
+- This action automatically installs `python-commitizen` (Commitizen). It verifies that commitizen is callable — preferably via `python -m commitizen` or, if present, via the `cz` CLI (e.g., `cz version`). The action prefers module invocation to avoid conflicts with other `cz` binaries. If neither form is usable, the action will fail.
 
 Usage
 
@@ -50,6 +50,6 @@ Inputs
   `private-key: ${{ secrets.KAM_PRIVATE_KEY }}`. The action will fail early with a helpful message if this input is missing. If you do not have a private key yet, please apply at https://developers.kernelsu.org.
 
 Notes
-- This action installs `python-commitizen` and ensures the `cz` CLI is present in the runner PATH; this is useful for consistent commit message and release management workflows. If the installation fails or `cz` cannot be found, the action will fail.
+- This action installs `python-commitizen` and ensures it's callable using either `python -m commitizen` or `cz` in PATH. The action will try both the module and the CLI form (preferring the module) and avoids invoking `cz` without a subcommand to prevent accidental errors. If neither form is available after installation, the action will fail.
 - Prefer `uses: MemDeco-WG/setup-kam@v1` (major alias) rather than pinning patch versions for stable behavior.
 

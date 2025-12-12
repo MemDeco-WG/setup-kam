@@ -39,6 +39,6 @@ jobs:
 说明：
 - 推荐在 `uses:` 中使用 `@v1`（major alias），避免固定到某个补丁版本。
 - `template-url` 下载文件时必须保留扩展名，否则 `kam tmpl import` 可能无法正确识别并拒绝导入。
-- 本 Action 会自动安装 `python-commitizen`（Commitizen）并检查 `cz` 命令是否可用；若安装或检查失败，action 会退出。
+- 本 Action 会自动安装 `python-commitizen`（Commitizen），并优先使用 `python -m commitizen` 来检查是否可调用；如果模块未能正确返回版本信息，Action 会尝试通过 PATH 中的 `cz` CLI 验证（例如 `cz version` 或 `cz --version`）。为避免误触发，Action 不会在没有子命令的情况下直接执行 `cz`。如果两种方式均不可用，Action 会失败。
 
 许可证：MIT
