@@ -149,20 +149,11 @@ runs:
         command: install
         args: --force kam
 
-    - name: Download and import template (Linux/macOS)
-      if: ${{ inputs.template-url != '' && runner.os != 'Windows' }}
+    - name: Download and import template
+      if: ${{ inputs.template-url != '' }}
       shell: bash
       run: |
         set -eu
         export PATH="$HOME/.cargo/bin:$PATH"
         echo "Downloading and importing template from ${{ inputs.template-url }}"
-        kam tmpl pull "${{ inputs.template-url }}"
-
-    - name: Download and import template (Windows)
-      if: ${{ inputs.template-url != '' && runner.os == 'Windows' }}
-      shell: pwsh
-      run: |
-        $ErrorActionPreference = 'Stop'
-        $env:Path = (Join-Path $env:USERPROFILE '.cargo\\bin') + ';' + $env:Path
-        Write-Host "Downloading and importing template from ${{ inputs.template-url }}"
         kam tmpl pull "${{ inputs.template-url }}"

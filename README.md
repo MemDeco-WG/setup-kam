@@ -36,6 +36,6 @@ Inputs
 
 - `github-token` (optional): Default `${{ github.token }}`.
 - `enable-cache` (optional): `'true'` (default) or `'false'` to disable caching.
-- `template-url` (optional): URL to a template archive (e.g., `.zip`, `.tgz`). The URL must include a filename and extension; if you download manually, preserve the extension or provide the extracted directory path to `kam tmpl import`.
+- `template-url` (optional): URL to a template archive (e.g., `.zip`, `.tgz`, `.tar.gz`). The URL must include a filename and extension; if you download manually, preserve the extension or provide the extracted directory path to `kam tmpl import`.
 
 Note: Prefer `uses: MemDeco-WG/setup-kam@v1` (major alias) rather than pinning patch versions.

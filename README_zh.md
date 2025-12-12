@@ -32,7 +32,7 @@ jobs:
 输入项（简要）：
 - `github-token`：可选，默认 `${{ github.token }}`。
 - `enable-cache`：可选，默认 `'true'`，设置为 `'false'` 可禁用缓存。
-- `template-url`：可选。请确保 URL 包含文件名和扩展名（例如 `.zip` / `.tgz`），或传入已解压目录路径。
+- `template-url`：可选。请确保 URL 包含文件名和扩展名（例如 `.zip` / `.tgz` , `.tar.gz`），或传入已解压目录路径。
 
 说明：
 - 推荐在 `uses:` 中使用 `@v1`（major alias），避免固定到某个补丁版本。
