@@ -154,53 +154,15 @@ runs:
       shell: bash
       run: |
         set -eu
-        USER_AGENT="setup-kam-action/1.0 (github.com/MemDeco-WG/setup-kam)"
-        echo "Downloading template from ${{ inputs.template-url }}"
-        TMPDIR=$(mktemp -d)
-        # Preserve the filename/extension from the URL and strip query string so kam can detect archive format (zip / tar.gz)
-        url="${{ inputs.template-url }}"
-        filename=$(basename "$url")
-        # Strip common query params and fragments (e.g., ?raw=true or #fragment) that can follow the file name
-        filename=$(echo "$filename" | sed -E 's/[?&#].*$//')
-        # Validate filename uses a recognized archive extension
-        if ! [[ "$filename" =~ \.(zip|tar\.gz|tar\.bz2|tgz|tar)$ ]]; then
-          echo "Error: The template URL does not contain a recognized archive extension (expected .zip, .tgz, .tar.gz, .tar.bz2, or .tar)."
-          echo "Downloaded filename: $filename"
-          echo "Please provide a URL that includes the filename and a recognized archive extension, or provide an already-extracted template directory."
-          exit 1
-        fi
-        TMP_FILE=$(mktemp)
-        STATUS=$(curl -sSL -w "%{http_code}" -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --retry-connrefused --max-time 60 -o "$TMPDIR/$filename" "$url" 2>/dev/null || echo "000")
-        if [ "$STATUS" != "200" ]; then
-          echo "Template download returned HTTP $STATUS; response preview (first 1K):" >&2
-          head -c 1024 "$TMPDIR/$filename" | sed -n '1,20p' >&2 || true
-          exit 1
-        fi
         export PATH="$HOME/.cargo/bin:$PATH"
-        echo "Importing template using kam..."
-        kam tmpl import "$TMPDIR/$filename"
+        echo "Downloading and importing template from ${{ inputs.template-url }}"
+        kam tmpl pull "${{ inputs.template-url }}"
 
     - name: Download and import template (Windows)
       if: ${{ inputs.template-url != '' && runner.os == 'Windows' }}
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
-        $UserAgent = 'setup-kam-action/1.0 (github.com/MemDeco-WG/setup-kam)'
-        Write-Host "Downloading template from ${{ inputs.template-url }}"
-        $url = "${{ inputs.template-url }}"
-        $tmp = Join-Path $env:TEMP 'kam-tmpl'
-        New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-        # Extract path from URL and resolve the filename (strip query string and fragment)
-        $file = [System.IO.Path]::GetFileName([System.Uri]::new($url).AbsolutePath)
-        # Validate filename uses a recognized archive extension
-        if (-not ($file -match '\.(zip|tar\.gz|tar\.bz2|tgz|tar)$')) {
-          Write-Error "Error: The template URL does not contain a recognized archive extension (expected .zip, .tgz, .tar.gz, .tar.bz2, or .tar)."
-          Write-Error "Downloaded filename: $file"
-          Write-Error "Please provide a URL that includes the filename and a recognized archive extension, or provide an already-extracted template directory."
-          exit 1
-        }
-        $dest = Join-Path $tmp $file
-        Invoke-WebRequest -UseBasicParsing -UserAgent $UserAgent -Uri $url -OutFile $dest
         $env:Path = (Join-Path $env:USERPROFILE '.cargo\\bin') + ';' + $env:Path
-        Write-Host "Importing template using kam..."
-        kam tmpl import $dest
+        Write-Host "Downloading and importing template from ${{ inputs.template-url }}"
+        kam tmpl pull "${{ inputs.template-url }}"
