@@ -19,7 +19,7 @@ inputs:
     default: ""
   private-key:
     description: "Private key content (e.g. the value of secrets.KAM_PRIVATE_KEY). This input is required; if not provided the action will fail immediately. If you don't yet have a key, please apply at developers.kernelsu.org."
-    required: true
+    required: false
 
 runs:
   using: "composite"
