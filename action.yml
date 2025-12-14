@@ -122,13 +122,11 @@ runs:
       if: ${{ inputs.private-key == '' }}
       shell: bash
       run: |
-        YELLOW_BOLD="\033[1;33m"
-        RESET="\033[0m"
         echo -e "\n\n\n\n\n"
-        echo "::warning::${YELLOW_BOLD}警告: KAM 私钥 (KAM_PRIVATE_KEY) 未设置。${RESET}"
-        echo "::warning::${YELLOW_BOLD}Warning: KAM private key (KAM_PRIVATE_KEY) is not set.${RESET}"
-        echo "::warning::${YELLOW_BOLD}请前往 developers.kernelsu.org 申请私钥。${RESET}"
-        echo "::warning::${YELLOW_BOLD}Please visit developers.kernelsu.org to apply for a private key.${RESET}"
+        echo "::warning::警告: KAM 私钥 (KAM_PRIVATE_KEY) 未设置。(不需要签名，忽略即可)"
+        echo "::warning::Warning: KAM private key (KAM_PRIVATE_KEY) is not set.(No signature required, please ignore)"
+        echo "::warning::请前往 developers.kernelsu.org 申请私钥。"
+        echo "::warning::Please visit developers.kernelsu.org to apply for a private key.（）"
 
     - name: Fetch latest kam version (for cache key)
       id: get-kam-version
