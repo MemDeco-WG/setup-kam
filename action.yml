@@ -1,284 +1,271 @@
-name: "Setup kam"
-description: "Install Rust Cargo environment and the latest version of kam with version-aware caching"
-
+name: Setup kam
+description: Install Rust Cargo environment and the latest version of kam with version-aware caching
 branding:
-  icon: "activity"
-  color: "purple"
+  icon: activity
+  color: purple
 inputs:
   github-token:
-    description: "GitHub Token for cache and rate limit enhancement"
+    description: GitHub Token for cache and rate limit enhancement
     required: false
-    default: ""
+    default: ''
   enable-cache:
-    description: "Toggle to enable caching of kam artifacts (true/false). Default: 'true'"
+    description: 'Toggle to enable caching of kam artifacts (true/false). Default: ''true'''
     required: false
-    default: "true"
+    default: 'true'
   template-url:
-    description: "Optional URL to download and import via 'kam tmpl import'"
+    description: Optional URL to download and import via 'kam tmpl import'
     required: false
-    default: ""
+    default: ''
   private-key:
-    description: "Private key content (e.g. the value of secrets.KAM_PRIVATE_KEY). This input is required; if not provided the action will fail immediately. If you don't yet have a key, please apply at developers.kernelsu.org."
+    description: Private key content (e.g. the value of secrets.KAM_PRIVATE_KEY). This input is required; if not provided the action will fail immediately. If you don't yet have a key, please apply at developers.kernelsu.org.
     required: false
-
 runs:
-  using: "composite"
+  using: composite
   steps:
-    - name: Install Rust (with Cargo)
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: stable
+  - name: Install Rust (with Cargo)
+    uses: dtolnay/rust-toolchain@stable
+    with:
+      toolchain: stable
+  - name: Install python-commitizen (Linux/macOS)
+    if: ${{ runner.os != 'Windows' }}
+    shell: bash
+    run: |
+      set -eu
+      PYTHON_BIN=$(command -v python || command -v python3 || true)
+      if [ -z "$PYTHON_BIN" ]; then
+        echo "::error::Python interpreter not found; commitizen requires Python. Please use a runner that includes Python or install it."
+        exit 1
+      fi
+      "$PYTHON_BIN" -m pip install --upgrade pip
+      "$PYTHON_BIN" -m pip install --upgrade --user commitizen
+      # Ensure user's local binary path is in PATH
+      export PATH="$HOME/.local/bin:$PATH"
 
-    - name: Install python-commitizen (Linux/macOS)
-      if: ${{ runner.os != 'Windows' }}
-      shell: bash
-      run: |
-        set -eu
-        PYTHON_BIN=$(command -v python || command -v python3 || true)
-        if [ -z "$PYTHON_BIN" ]; then
-          echo "::error::Python interpreter not found; commitizen requires Python. Please use a runner that includes Python or install it."
-          exit 1
-        fi
-        "$PYTHON_BIN" -m pip install --upgrade pip
-        "$PYTHON_BIN" -m pip install --upgrade --user commitizen
-        # Ensure user's local binary path is in PATH
-        export PATH="$HOME/.local/bin:$PATH"
+      # Prefer invoking commitizen via the installed Python module to avoid ambiguous 'cz' binaries.
+      # Try both the flag and subcommand forms of the version check.
+      if "$PYTHON_BIN" -m commitizen --version >/dev/null 2>&1; then
+        echo "commitizen (module) version: $("$PYTHON_BIN" -m commitizen --version 2>/dev/null || true)"
+      elif "$PYTHON_BIN" -m commitizen version >/dev/null 2>&1; then
+        echo "commitizen (module) version (subcommand): $("$PYTHON_BIN" -m commitizen version 2>/dev/null || true)"
+      else
+        echo "::warning::commitizen module appears installed, but 'python -m commitizen --version'/'version' did not return a version."
+      fi
 
-        # Prefer invoking commitizen via the installed Python module to avoid ambiguous 'cz' binaries.
-        # Try both the flag and subcommand forms of the version check.
-        if "$PYTHON_BIN" -m commitizen --version >/dev/null 2>&1; then
-          echo "commitizen (module) version: $("$PYTHON_BIN" -m commitizen --version 2>/dev/null || true)"
-        elif "$PYTHON_BIN" -m commitizen version >/dev/null 2>&1; then
-          echo "commitizen (module) version (subcommand): $("$PYTHON_BIN" -m commitizen version 2>/dev/null || true)"
+      # If available in PATH, verify 'cz' through safe invocations only (avoid calling 'cz' without args).
+      if command -v cz >/dev/null 2>&1; then
+        if cz version >/dev/null 2>&1; then
+          cz version || true
+        elif cz --version >/dev/null 2>&1; then
+          cz --version || true
         else
-          echo "::warning::commitizen module appears installed, but 'python -m commitizen --version'/'version' did not return a version."
+          echo "::warning::cz command found but did not respond to 'cz version' or 'cz --version'."
         fi
+      else
+        echo "::warning::cz command not found in PATH; you can still use 'python -m commitizen' or ensure '~/.local/bin' is on PATH."
+      fi
+  - name: Install python-commitizen (Windows)
+    if: ${{ runner.os == 'Windows' }}
+    shell: pwsh
+    run: |
+      $py = (Get-Command python -ErrorAction SilentlyContinue).Source
+      if (-not $py) {
+        Write-Error "Python interpreter not found; commitizen requires Python. Please use a runner that includes Python or install it."
+        exit 1
+      }
+      & $py -m pip install --upgrade pip
+      & $py -m pip install --upgrade --user commitizen
+      # Discover user base scripts folder and add to PATH
+      $site = (& $py -c 'import site; print(site.USER_BASE)') -replace '\r|\n',''
+      $userScripts = Join-Path $site 'Scripts'
+      if (Test-Path $userScripts) {
+        $env:PATH = $userScripts + ';' + $env:PATH
+      }
 
-        # If available in PATH, verify 'cz' through safe invocations only (avoid calling 'cz' without args).
-        if command -v cz >/dev/null 2>&1; then
-          if cz version >/dev/null 2>&1; then
-            cz version || true
-          elif cz --version >/dev/null 2>&1; then
-            cz --version || true
-          else
-            echo "::warning::cz command found but did not respond to 'cz version' or 'cz --version'."
-          fi
-        else
-          echo "::warning::cz command not found in PATH; you can still use 'python -m commitizen' or ensure '~/.local/bin' is on PATH."
-        fi
-
-    - name: Install python-commitizen (Windows)
-      if: ${{ runner.os == 'Windows' }}
-      shell: pwsh
-      run: |
-        $py = (Get-Command python -ErrorAction SilentlyContinue).Source
-        if (-not $py) {
-          Write-Error "Python interpreter not found; commitizen requires Python. Please use a runner that includes Python or install it."
-          exit 1
-        }
-        & $py -m pip install --upgrade pip
-        & $py -m pip install --upgrade --user commitizen
-        # Discover user base scripts folder and add to PATH
-        $site = (& $py -c 'import site; print(site.USER_BASE)') -replace '\r|\n',''
-        $userScripts = Join-Path $site 'Scripts'
-        if (Test-Path $userScripts) {
-          $env:PATH = $userScripts + ';' + $env:PATH
-        }
-
-        # Prefer invoking commitizen via the installed Python module to avoid ambiguous 'cz' binaries.
-        $commitizenOk = $false
+      # Prefer invoking commitizen via the installed Python module to avoid ambiguous 'cz' binaries.
+      $commitizenOk = $false
+      try {
+        & $py -m commitizen --version *> $null
+        $commitizenOk = $true
+        Write-Host "commitizen (module) version: $(& $py -m commitizen --version)"
+      } catch {}
+      if (-not $commitizenOk) {
         try {
-          & $py -m commitizen --version *> $null
+          & $py -m commitizen version *> $null
           $commitizenOk = $true
-          Write-Host "commitizen (module) version: $(& $py -m commitizen --version)"
+          Write-Host "commitizen (module) version (subcommand): $(& $py -m commitizen version)"
         } catch {}
-        if (-not $commitizenOk) {
-          try {
-            & $py -m commitizen version *> $null
-            $commitizenOk = $true
-            Write-Host "commitizen (module) version (subcommand): $(& $py -m commitizen version)"
-          } catch {}
-        }
-        if (-not $commitizenOk) {
-          Write-Warning "commitizen module appears installed, but 'python -m commitizen --version'/'version' did not return a version."
-        }
+      }
+      if (-not $commitizenOk) {
+        Write-Warning "commitizen module appears installed, but 'python -m commitizen --version'/'version' did not return a version."
+      }
 
-        # If available in PATH, verify 'cz' through safe invocations only (avoid calling 'cz' without args).
-        if (Get-Command cz -ErrorAction SilentlyContinue) {
+      # If available in PATH, verify 'cz' through safe invocations only (avoid calling 'cz' without args).
+      if (Get-Command cz -ErrorAction SilentlyContinue) {
+        try {
+          cz version
+        } catch {
           try {
-            cz version
+            cz --version
           } catch {
-            try {
-              cz --version
-            } catch {
-              Write-Warning "cz command found but did not respond to 'cz version' or 'cz --version'."
-            }
+            Write-Warning "cz command found but did not respond to 'cz version' or 'cz --version'."
           }
-        } else {
-          Write-Warning "cz command not found in PATH; you can still use 'python -m commitizen' or ensure '$userScripts' is on PATH."
         }
-
-    - name: Verify KAM private key is set
-      if: ${{ inputs.private-key == '' }}
-      shell: bash
-      run: |
-        echo -e "\n\n\n\n\n"
-        echo "::warning::警告: KAM 私钥 (KAM_PRIVATE_KEY) 未设置。(不需要签名，忽略即可)"
-        echo "::warning::Warning: KAM private key (KAM_PRIVATE_KEY) is not set.(No signature required, please ignore)"
-        echo "::warning::请前往 developers.kernelsu.org 申请私钥。"
-        echo "::warning::Please visit developers.kernelsu.org to apply for a private key.（）"
-
-    - name: Fetch latest kam version (for cache key)
-      id: get-kam-version
-      shell: bash
-      run: |
-        set -eu
-        USER_AGENT="setup-kam-action/1.0 (github.com/MemDeco-WG/setup-kam)"
-        # Prefer crates.io as the primary source for versions; fallback to GitHub releases.
-        URL="https://crates.io/api/v1/crates/kam"
-        TMP_FILE_CRATES=$(mktemp)
-        STATUS=$(curl -sS -w "%{http_code}" -H "User-Agent: $USER_AGENT" -H "Accept: application/json" --retry 3 --retry-delay 2 --max-time 15 -o "$TMP_FILE_CRATES" "$URL" 2>/dev/null || echo "000")
-        CRATES_JSON=$(cat "$TMP_FILE_CRATES" || true)
-        rm -f "$TMP_FILE_CRATES" || true
-        if [ "$STATUS" = "200" ] && [ -n "$CRATES_JSON" ]; then
+      } else {
+        Write-Warning "cz command not found in PATH; you can still use 'python -m commitizen' or ensure '$userScripts' is on PATH."
+      }
+  - name: Verify KAM private key is set
+    if: ${{ inputs.private-key == '' }}
+    shell: bash
+    run: |
+      echo -e "\n\n\n\n\n"
+      echo "::warning::警告: KAM 私钥 (KAM_PRIVATE_KEY) 未设置。(不需要签名，忽略即可)"
+      echo "::warning::Warning: KAM private key (KAM_PRIVATE_KEY) is not set.(No signature required, please ignore)"
+      echo "::warning::请前往 developers.kernelsu.org 申请私钥。"
+      echo "::warning::Please visit developers.kernelsu.org to apply for a private key.（）"
+  - name: Fetch latest kam version (for cache key)
+    id: get-kam-version
+    shell: bash
+    run: |
+      set -eu
+      USER_AGENT="setup-kam-action/1.0 (github.com/MemDeco-WG/setup-kam)"
+      # Prefer crates.io as the primary source for versions; fallback to GitHub releases.
+      URL="https://crates.io/api/v1/crates/kam"
+      TMP_FILE_CRATES=$(mktemp)
+      STATUS=$(curl -sS -w "%{http_code}" -H "User-Agent: $USER_AGENT" -H "Accept: application/json" --retry 3 --retry-delay 2 --max-time 15 -o "$TMP_FILE_CRATES" "$URL" 2>/dev/null || echo "000")
+      CRATES_JSON=$(cat "$TMP_FILE_CRATES" || true)
+      rm -f "$TMP_FILE_CRATES" || true
+      if [ "$STATUS" = "200" ] && [ -n "$CRATES_JSON" ]; then
+        PYTHON_BIN=$(command -v python || command -v python3 || true)
+        if [ -n "$PYTHON_BIN" ]; then
+          LATEST_VERSION=$(echo "$CRATES_JSON" | $PYTHON_BIN -c 'import json,sys; d=json.load(sys.stdin); print(d.get("crate",{}).get("max_version",""))' || true)
+        else
+          LATEST_VERSION=$(echo "$CRATES_JSON" | sed -n 's/.*"max_version":[[:space:]]*"\([^"]\+\)".*/\1/p' || true)
+        fi
+        LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
+      else
+        echo "crates.io lookup returned HTTP $STATUS; response preview:" >&2
+        echo "$CRATES_JSON" | sed -n '1,10p' >&2 || true
+        # Fallback to GitHub releases
+        GH_TOKEN="${{ inputs.github-token || env.GITHUB_TOKEN }}"
+        GH_API="https://api.github.com/repos/MemDeco-WG/Kam/releases/latest"
+        TMP_FILE_GH=$(mktemp)
+        if [ -n "$GH_TOKEN" ]; then
+          GH_STATUS=$(curl -sS -w "%{http_code}" -H "User-Agent: $USER_AGENT" -H "Authorization: token $GH_TOKEN" --retry 3 --retry-delay 2 --max-time 15 -o "$TMP_FILE_GH" "$GH_API" 2>/dev/null || echo "000")
+        else
+          GH_STATUS=$(curl -sS -w "%{http_code}" -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --max-time 15 -o "$TMP_FILE_GH" "$GH_API" 2>/dev/null || echo "000")
+        fi
+        GH_JSON=$(cat "$TMP_FILE_GH" || true)
+        rm -f "$TMP_FILE_GH" || true
+        if [ "$GH_STATUS" = "200" ] && [ -n "$GH_JSON" ]; then
           PYTHON_BIN=$(command -v python || command -v python3 || true)
           if [ -n "$PYTHON_BIN" ]; then
-            LATEST_VERSION=$(echo "$CRATES_JSON" | $PYTHON_BIN -c 'import json,sys; d=json.load(sys.stdin); print(d.get("crate",{}).get("max_version",""))' || true)
+            TAG=$(echo "$GH_JSON" | $PYTHON_BIN -c 'import json,sys; d=json.load(sys.stdin); print(d.get("tag_name",""))' || true)
           else
-            LATEST_VERSION=$(echo "$CRATES_JSON" | sed -n 's/.*"max_version":[[:space:]]*"\([^"]\+\)".*/\1/p' || true)
+            TAG=$(echo "$GH_JSON" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]\+\)".*/\1/p' || true)
           fi
-          LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
+          LATEST_VERSION=$(echo "$TAG" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
         else
-          echo "crates.io lookup returned HTTP $STATUS; response preview:" >&2
-          echo "$CRATES_JSON" | sed -n '1,10p' >&2 || true
-          # Fallback to GitHub releases
-          GH_TOKEN="${{ inputs.github-token || env.GITHUB_TOKEN }}"
-          GH_API="https://api.github.com/repos/MemDeco-WG/Kam/releases/latest"
-          TMP_FILE_GH=$(mktemp)
-          if [ -n "$GH_TOKEN" ]; then
-            GH_STATUS=$(curl -sS -w "%{http_code}" -H "User-Agent: $USER_AGENT" -H "Authorization: token $GH_TOKEN" --retry 3 --retry-delay 2 --max-time 15 -o "$TMP_FILE_GH" "$GH_API" 2>/dev/null || echo "000")
-          else
-            GH_STATUS=$(curl -sS -w "%{http_code}" -H "User-Agent: $USER_AGENT" --retry 3 --retry-delay 2 --max-time 15 -o "$TMP_FILE_GH" "$GH_API" 2>/dev/null || echo "000")
-          fi
-          GH_JSON=$(cat "$TMP_FILE_GH" || true)
-          rm -f "$TMP_FILE_GH" || true
-          if [ "$GH_STATUS" = "200" ] && [ -n "$GH_JSON" ]; then
-            PYTHON_BIN=$(command -v python || command -v python3 || true)
-            if [ -n "$PYTHON_BIN" ]; then
-              TAG=$(echo "$GH_JSON" | $PYTHON_BIN -c 'import json,sys; d=json.load(sys.stdin); print(d.get("tag_name",""))' || true)
-            else
-              TAG=$(echo "$GH_JSON" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]\+\)".*/\1/p' || true)
-            fi
-            LATEST_VERSION=$(echo "$TAG" | sed -E 's/^[vV]//' | tr -d '\r\n') || true
-          else
-            echo "GitHub releases lookup failed with HTTP $GH_STATUS; response preview:" >&2
-            echo "$GH_JSON" | sed -n '1,10p' >&2 || true
-            LATEST_VERSION="unknown"
-          fi
+          echo "GitHub releases lookup failed with HTTP $GH_STATUS; response preview:" >&2
+          echo "$GH_JSON" | sed -n '1,10p' >&2 || true
+          LATEST_VERSION="unknown"
         fi
+      fi
 
-        echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
-        echo "Fetched latest kam version: $LATEST_VERSION"
+      echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+      echo "Fetched latest kam version: $LATEST_VERSION"
+  - name: Cache kam (Linux/macOS)
+    if: ${{ inputs.enable-cache == 'true' && runner.os != 'Windows' }}
+    uses: actions/cache@v4
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
+    with:
+      path: |
+        ~/.cargo/registry/cache/
+        ~/.cargo/git/db/
+        ~/.cargo/bin/kam
+      key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
+      restore-keys: |
+        ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
+  - name: Cache kam (Windows)
+    if: ${{ inputs.enable-cache == 'true' && runner.os == 'Windows' }}
+    uses: actions/cache@v4.3.0
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
+    with:
+      path: |
+        %USERPROFILE%/.cargo/registry/cache
+        %USERPROFILE%/.cargo/git/db
+        %USERPROFILE%/.cargo/bin/kam.exe
+      key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
+      restore-keys: |
+        ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
+  - name: Check installed kam version and decide whether to install
+    id: check-kam
+    shell: bash
+    run: |
+      set -eu
+      LATEST_VERSION="${{ steps.get-kam-version.outputs.latest_version }}"
+      LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
 
-    - name: Cache kam (Linux/macOS)
-      if: ${{ inputs.enable-cache == 'true' && runner.os != 'Windows' }}
-      uses: actions/cache@v4
-      env:
-        GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
-      with:
-        path: |
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          ~/.cargo/bin/kam
-        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
+      INSTALLED_VERSION=""
+      if command -v kam &> /dev/null; then
+        INSTALLED_VERSION=$(kam --version 2>/dev/null | awk '{print $2}' | sed -E 's/^[vV]//' | tr -d '\r\n') || true
+      fi
+      echo "installed_version=$INSTALLED_VERSION" >> $GITHUB_OUTPUT
 
-    - name: Cache kam (Windows)
-      if: ${{ inputs.enable-cache == 'true' && runner.os == 'Windows' }}
-      uses: actions/cache@v4.3.0
-      env:
-        GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
-      with:
-        path: |
-          %USERPROFILE%/.cargo/registry/cache
-          %USERPROFILE%/.cargo/git/db
-          %USERPROFILE%/.cargo/bin/kam.exe
-        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
-
-    - name: Check installed kam version and decide whether to install
-      id: check-kam
-      shell: bash
-      run: |
-        set -eu
-        LATEST_VERSION="${{ steps.get-kam-version.outputs.latest_version }}"
-        LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
-
-        INSTALLED_VERSION=""
-        if command -v kam &> /dev/null; then
-          INSTALLED_VERSION=$(kam --version 2>/dev/null | awk '{print $2}' | sed -E 's/^[vV]//' | tr -d '\r\n') || true
-        fi
-        echo "installed_version=$INSTALLED_VERSION" >> $GITHUB_OUTPUT
-
-        if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "unknown" ]; then
-          # If we don't know the target version, only install if nothing is installed.
-          if [ -z "$INSTALLED_VERSION" ]; then
-            echo "should_install=true" >> $GITHUB_OUTPUT
-          else
-            echo "should_install=false" >> $GITHUB_OUTPUT
-          fi
+      if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "unknown" ]; then
+        # If we don't know the target version, only install if nothing is installed.
+        if [ -z "$INSTALLED_VERSION" ]; then
+          echo "should_install=true" >> $GITHUB_OUTPUT
         else
-          # If we have a target version, install if installed version does not match.
-          if [ "$INSTALLED_VERSION" = "$LATEST_VERSION" ]; then
-            echo "should_install=false" >> $GITHUB_OUTPUT
-          else
-            echo "should_install=true" >> $GITHUB_OUTPUT
-          fi
+          echo "should_install=false" >> $GITHUB_OUTPUT
         fi
+      else
+        # If we have a target version, install if installed version does not match.
+        if [ "$INSTALLED_VERSION" = "$LATEST_VERSION" ]; then
+          echo "should_install=false" >> $GITHUB_OUTPUT
+        else
+          echo "should_install=true" >> $GITHUB_OUTPUT
+        fi
+      fi
+  - name: Install latest kam (explicit version via actions-rs/cargo)
+    if: ${{ steps.check-kam.outputs.should_install == 'true' && steps.get-kam-version.outputs.latest_version != 'unknown' }}
+    uses: actions-rs/cargo@v1
+    with:
+      command: install
+      args: --force --version ${{ steps.get-kam-version.outputs.latest_version }} kam
+  - name: Install latest kam (no explicit version via actions-rs/cargo)
+    if: ${{ steps.check-kam.outputs.should_install == 'true' && steps.get-kam-version.outputs.latest_version == 'unknown' }}
+    uses: actions-rs/cargo@v1
+    with:
+      command: install
+      args: --force kam
+  - name: Import private key to keyring
+    if: ${{ inputs.private-key != '' }}
+    shell: bash
+    run: |
+      set -eu
+      # Generate random passphrase
+      PASS=$(openssl rand -base64 32)
 
-    - name: Install latest kam (explicit version via actions-rs/cargo)
-      if: ${{ steps.check-kam.outputs.should_install == 'true' && steps.get-kam-version.outputs.latest_version != 'unknown' }}
-      uses: actions-rs/cargo@v1
-      with:
-        command: install
-        args: --force --version ${{ steps.get-kam-version.outputs.latest_version }} kam
+      # Write private key to temp file
+      echo "${{ inputs.private-key }}" > pk.pem
 
-    - name: Install latest kam (no explicit version via actions-rs/cargo)
-      if: ${{ steps.check-kam.outputs.should_install == 'true' && steps.get-kam-version.outputs.latest_version == 'unknown' }}
-      uses: actions-rs/cargo@v1
-      with:
-        command: install
-        args: --force kam
+      # Import to kam keyring (encrypted)
+      # Using 'main' as the secret name, as commonly used by kam sign
+      kam secret add main --file pk.pem --password "$PASS" --force-file
 
-    - name: Import private key to keyring
-      if: ${{ inputs.private-key != '' }}
-      shell: bash
-      run: |
-        set -eu
-        # Generate random passphrase
-        PASS=$(openssl rand -base64 32)
+      # Cleanup raw key immediately
+      rm -f pk.pem
 
-        # Write private key to temp file
-        echo "${{ inputs.private-key }}" > pk.pem
-
-        # Import to kam keyring (encrypted)
-        # Using 'main' as the secret name, as commonly used by kam sign
-        kam secret add main --file pk.pem --password "$PASS" --force-file
-
-        # Cleanup raw key immediately
-        rm -f pk.pem
-
-        # Export passphrase for subsequent steps
-        echo "::add-mask::$PASS"
-        echo "KAM_SIGN_PASSPHRASE=$PASS" >> $GITHUB_ENV
-
-    - name: Download and import template
-      if: ${{ inputs.template-url != '' }}
-      shell: bash
-      run: |
-        set -eu
-        export PATH="$HOME/.cargo/bin:$PATH"
-        echo "Downloading and importing template from ${{ inputs.template-url }}"
-        kam tmpl pull "${{ inputs.template-url }}"
+      # Export passphrase for subsequent steps
+      echo "::add-mask::$PASS"
+      echo "KAM_SIGN_PASSPHRASE=$PASS" >> $GITHUB_ENV
+  - name: Download and import template
+    if: ${{ inputs.template-url != '' }}
+    shell: bash
+    run: |
+      set -eu
+      export PATH="$HOME/.cargo/bin:$PATH"
+      echo "Downloading and importing template from ${{ inputs.template-url }}"
+      kam tmpl pull "${{ inputs.template-url }}"

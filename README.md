@@ -52,4 +52,3 @@ Inputs
 Notes
 - This action installs `python-commitizen` and ensures it's callable using either `python -m commitizen` or `cz` in PATH. The action will try both the module and the CLI form (preferring the module) and avoids invoking `cz` without a subcommand to prevent accidental errors. If neither form is available after installation, the action will fail.
 - Prefer `uses: MemDeco-WG/setup-kam@v1` (major alias) rather than pinning patch versions for stable behavior.
-
