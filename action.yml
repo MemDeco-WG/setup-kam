@@ -12,6 +12,22 @@ inputs:
     description: "Toggle to enable caching of kam artifacts (true/false). Default: 'true'"
     required: false
     default: "true"
+  cache-cargo:
+    description: "Whether to enable Cargo & Rustup caching (true/false). When 'false' this skips the Cargo cache steps."
+    required: false
+    default: "true"
+  cache-pip:
+    description: "Whether to enable pip caching (true/false). When 'false' this skips the pip cache steps."
+    required: false
+    default: "true"
+  cache-js:
+    description: "Whether to enable JavaScript package manager caching (npm/yarn/pnpm/bun) (true/false). Default: 'true'."
+    required: false
+    default: "true"
+  cache-kam:
+    description: "Whether to enable caching of the kam binary (true/false). Default: 'true'."
+    required: false
+    default: "true"
   kam-version:
     description: Optional. Pin a specific kam version to install (e.g. '0.1.2'). If set, it will be used and network lookups will be skipped.
     required: false
@@ -59,7 +75,7 @@ runs:
       with:
         toolchain: stable
     - name: Cache Cargo & Rustup
-      if: ${{ inputs.enable-cache == 'true' }}
+      if: ${{ inputs.enable-cache == 'true' && inputs.cache-cargo == 'true' }}
       uses: actions/cache@v4
       with:
         path: |
@@ -70,7 +86,7 @@ runs:
         restore-keys: |
           ${{ runner.os }}-rust-cache-
     - name: Cache pip
-      if: ${{ inputs.enable-cache == 'true' }}
+      if: ${{ inputs.enable-cache == 'true' && inputs.cache-pip == 'true' }}
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
@@ -78,7 +94,7 @@ runs:
         restore-keys: |
           ${{ runner.os }}-pip-
     - name: Cache JavaScript package manager caches (npm / yarn / pnpm / bun)
-      if: ${{ inputs.enable-cache == 'true' }}
+      if: ${{ inputs.enable-cache == 'true' && inputs.cache-js == 'true' }}
       uses: actions/cache@v4
       with:
         path: |
@@ -304,7 +320,7 @@ runs:
         echo "Fetched latest kam version: $LATEST_VERSION"
     - name: Restore kam cache (Linux/macOS)
       id: restore-kam-linux
-      if: ${{ inputs.enable-cache == 'true' && runner.os != 'Windows' }}
+      if: ${{ inputs.enable-cache == 'true' && inputs.cache-kam == 'true' && runner.os != 'Windows' }}
       uses: actions/cache@v4
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
@@ -318,7 +334,7 @@ runs:
           ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
     - name: Restore kam cache (Windows)
       id: restore-kam-windows
-      if: ${{ inputs.enable-cache == 'true' && runner.os == 'Windows' }}
+      if: ${{ inputs.enable-cache == 'true' && inputs.cache-kam == 'true' && runner.os == 'Windows' }}
       uses: actions/cache@v4.3.0
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
@@ -395,7 +411,7 @@ runs:
           echo "kam binary not found"
         fi
     - name: Save kam cache (Linux/macOS)
-      if: ${{ always() && inputs.enable-cache == 'true' && steps.kam-present.outputs.present == 'true' && runner.os != 'Windows' }}
+      if: ${{ always() && inputs.enable-cache == 'true' && inputs.cache-kam == 'true' && steps.kam-present.outputs.present == 'true' && runner.os != 'Windows' }}
       uses: actions/cache@v4
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
@@ -408,7 +424,7 @@ runs:
         restore-keys: |
           ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
     - name: Save kam cache (Windows)
-      if: ${{ always() && inputs.enable-cache == 'true' && steps.kam-present.outputs.present == 'true' && runner.os == 'Windows' }}
+      if: ${{ always() && inputs.enable-cache == 'true' && inputs.cache-kam == 'true' && steps.kam-present.outputs.present == 'true' && runner.os == 'Windows' }}
       uses: actions/cache@v4.3.0
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
