@@ -12,8 +12,8 @@ inputs:
     description: "Toggle to enable caching of kam artifacts (true/false). Default: 'true'."
     required: false
     default: "true"
-  cache-types:
-    description: "Comma-separated list of cache types to enable (or 'all'/'none'). Supported values: 'cargo','pip','js','kam'. Default: 'all'."
+  cache-targets:
+    description: "Comma-separated list of cache targets to enable (or 'all'/'none'). Supported values: 'cargo','pip','npm','yarn','pnpm','bun','kam'. Default: 'all'."
     required: false
     default: "all"
   kam-version:
@@ -63,7 +63,7 @@ runs:
       with:
         toolchain: stable
     - name: Cache Cargo & Rustup
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-types == 'all' || contains(inputs.cache-types, 'cargo')) }}
+      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'cargo')) }}
       uses: actions/cache@v4
       with:
         path: |
@@ -74,26 +74,54 @@ runs:
         restore-keys: |
           ${{ runner.os }}-rust-cache-
     - name: Cache pip
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-types == 'all' || contains(inputs.cache-types, 'pip')) }}
+      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'pip')) }}
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') || github.sha }}-v1
         restore-keys: |
           ${{ runner.os }}-pip-
-    - name: Cache JavaScript package manager caches (npm / yarn / pnpm / bun)
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-types == 'all' || contains(inputs.cache-types, 'js')) }}
+    - name: Cache npm
+      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'npm')) }}
       uses: actions/cache@v4
       with:
         path: |
           ~/.npm
-          ~/.cache/yarn
-          ~/.yarn/cache
-          ~/.pnpm-store
-          ~/.bun
-        key: ${{ runner.os }}-js-cache-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml', '**/bun.lockb') || github.sha }}-v1
+          ~/.cache/npm
+        key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') || github.sha }}-v1
         restore-keys: |
-          ${{ runner.os }}-js-cache-
+          ${{ runner.os }}-npm-
+
+    - name: Cache Yarn
+      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'yarn')) }}
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/yarn
+          ~/.yarn
+        key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') || github.sha }}-v1
+        restore-keys: |
+          ${{ runner.os }}-yarn-
+
+    - name: Cache pnpm
+      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'pnpm')) }}
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.pnpm-store
+        key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') || github.sha }}-v1
+        restore-keys: |
+          ${{ runner.os }}-pnpm-
+
+    - name: Cache bun
+      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'bun')) }}
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.bun
+        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') || github.sha }}-v1
+        restore-keys: |
+          ${{ runner.os }}-bun-
     - name: Setup uv
       id: setup-uv
       uses: astral-sh/setup-uv@v7
@@ -309,7 +337,7 @@ runs:
         echo "Fetched latest kam version: $LATEST_VERSION"
     - name: Restore kam cache (Linux/macOS)
       id: restore-kam-linux
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-types == 'all' || contains(inputs.cache-types, 'kam')) && runner.os != 'Windows' }}
+      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'kam')) && runner.os != 'Windows' }}
       uses: actions/cache@v4
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
@@ -323,7 +351,7 @@ runs:
           ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
     - name: Restore kam cache (Windows)
       id: restore-kam-windows
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-types == 'all' || contains(inputs.cache-types, 'kam')) && runner.os == 'Windows' }}
+      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'kam')) && runner.os == 'Windows' }}
       uses: actions/cache@v4.3.0
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
@@ -400,7 +428,7 @@ runs:
           echo "kam binary not found"
         fi
     - name: Save kam cache (Linux/macOS)
-      if: ${{ always() && inputs.enable-cache == 'true' && (inputs.cache-types == 'all' || contains(inputs.cache-types, 'kam')) && steps.kam-present.outputs.present == 'true' && runner.os != 'Windows' }}
+      if: ${{ always() && inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'kam')) && steps.kam-present.outputs.present == 'true' && runner.os != 'Windows' }}
       uses: actions/cache@v4
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
@@ -413,7 +441,7 @@ runs:
         restore-keys: |
           ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
     - name: Save kam cache (Windows)
-      if: ${{ always() && inputs.enable-cache == 'true' && (inputs.cache-types == 'all' || contains(inputs.cache-types, 'kam')) && steps.kam-present.outputs.present == 'true' && runner.os == 'Windows' }}
+      if: ${{ always() && inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'kam')) && steps.kam-present.outputs.present == 'true' && runner.os == 'Windows' }}
       uses: actions/cache@v4.3.0
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
