@@ -2,7 +2,7 @@
 
 [![Release](https://img.shields.io/github/v/tag/MemDeco-WG/setup-kam?label=release)](https://github.com/MemDeco-WG/setup-kam/releases) [![License](https://img.shields.io/github/license/MemDeco-WG/setup-kam.svg)](LICENSE)
 
-在 GitHub Actions 中安装 kam（Rust 工具），并支持可选模板导入与缓存。
+在 GitHub Actions 中安装 kam（Rust 工具），并支持 Rust stable、版本感知缓存、可选 Commitizen 安装、私钥导入与模板导入。
 
 用法（最简）：
 
@@ -52,6 +52,8 @@ jobs:
 
 说明：
 - 推荐在 `uses:` 中使用 `@v1`（major alias），避免固定到某个补丁版本。
+- Action 会通过 `dtolnay/rust-toolchain` 安装 Rust stable，并直接执行 `cargo install` 安装 `kam`，不再依赖已过时的 `actions-rs/cargo`。
+- `kam-version` 可固定安装版本；留空时会优先从 crates.io 解析最新版本，失败后回退查询 GitHub Releases。
 - `template-url` 下载文件时必须保留扩展名，否则 `kam tmpl import` 可能无法正确识别并拒绝导入。
 - 本 Action 会尝试安装 `python-commitizen`（Commitizen）并校验其可用性（优先使用 `python -m commitizen`，无法时退回使用 PATH 中的 `cz`）。默认情况下这是一个非致命的警告；若要在校验失败时让 action 直接失败，请设置 `require-commitizen: 'true'`。
 - 在运行前，Action 会对若干外部工具做预检（例如 `curl`、`openssl`，以及当 `template-url` 指向压缩包时需要的归档工具），如缺失则会失败并给出可复现的提示信息。

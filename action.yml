@@ -53,7 +53,7 @@ outputs:
     description: Whether the action decided to install kam (true/false)
     value: "${{ steps.check-kam.outputs.should_install }}"
   key-imported:
-    description: "true' if a private key was imported to the kam secret store"
+    description: "'true' if a private key was imported to the kam secret store"
     value: "${{ steps.import-key.outputs.key_imported }}"
 runs:
   using: composite
@@ -203,12 +203,15 @@ runs:
         } catch {}
         if (-not $commitizenOk) {
           if (Get-Command cz -ErrorAction SilentlyContinue) {
-            try { cz version
+            try {
               cz version
+              $commitizenOk = $true
             } catch {
-              try { cz --version } catch {}
+              try {
+                cz --version
+                $commitizenOk = $true
+              } catch {}
             }
-            $commitizenOk = $true
           }
         }
 
@@ -395,18 +398,23 @@ runs:
             echo "should_install=true" >> $GITHUB_OUTPUT
           fi
         fi
-    - name: Install latest kam (explicit version via actions-rs/cargo)
-      if: ${{ steps.check-kam.outputs.should_install == 'true' && steps.get-kam-version.outputs.latest_version != 'unknown' }}
-      uses: actions-rs/cargo@v1
-      with:
-        command: install
-        args: --force --version ${{ steps.get-kam-version.outputs.latest_version }} kam
-    - name: Install latest kam (no explicit version via actions-rs/cargo)
-      if: ${{ steps.check-kam.outputs.should_install == 'true' && steps.get-kam-version.outputs.latest_version == 'unknown' }}
-      uses: actions-rs/cargo@v1
-      with:
-        command: install
-        args: --force kam
+    - name: Install kam
+      if: ${{ steps.check-kam.outputs.should_install == 'true' }}
+      shell: bash
+      run: |
+        set -eu
+        export PATH="$HOME/.cargo/bin:$PATH"
+
+        LATEST_VERSION="${{ steps.get-kam-version.outputs.latest_version }}"
+        LATEST_VERSION=$(echo "$LATEST_VERSION" | sed -E 's/^[vV]//' | tr -d '\r\n')
+
+        if [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "unknown" ]; then
+          echo "Installing kam $LATEST_VERSION via cargo"
+          cargo install --force --version "$LATEST_VERSION" kam
+        else
+          echo "Installing latest kam via cargo"
+          cargo install --force kam
+        fi
 
     # Save kam cache after a successful installation to avoid re-compilation if subsequent steps fail.
     - name: Check kam presence after installation
