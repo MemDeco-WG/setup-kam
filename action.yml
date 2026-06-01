@@ -91,7 +91,7 @@ runs:
         toolchain: stable
     - name: Cache Cargo & Rustup
       if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',cargo,')) }}
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cargo/registry
@@ -102,7 +102,7 @@ runs:
           ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-rust-
     - name: Cache pip
       if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',pip,')) }}
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-pip-${{ hashFiles('**/requirements.txt', '**/pyproject.toml', '**/uv.lock') }}
@@ -110,7 +110,7 @@ runs:
           ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-pip-
     - name: Cache npm
       if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',npm,')) }}
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.npm
@@ -121,7 +121,7 @@ runs:
 
     - name: Cache Yarn
       if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',yarn,')) }}
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cache/yarn
@@ -132,7 +132,7 @@ runs:
 
     - name: Cache pnpm
       if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',pnpm,')) }}
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.pnpm-store
@@ -142,7 +142,7 @@ runs:
 
     - name: Cache bun
       if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',bun,')) }}
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.bun
@@ -370,7 +370,7 @@ runs:
     - name: Restore kam cache (Linux/macOS)
       id: restore-kam-linux
       if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',kam,')) && runner.os != 'Windows' }}
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
       with:
@@ -384,7 +384,7 @@ runs:
     - name: Restore kam cache (Windows)
       id: restore-kam-windows
       if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',kam,')) && runner.os == 'Windows' }}
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
       with:
@@ -466,7 +466,7 @@ runs:
         fi
     - name: Save kam cache (Linux/macOS)
       if: ${{ always() && inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',kam,')) && steps.kam-present.outputs.present == 'true' && steps.restore-kam-linux.outputs.cache-hit != 'true' && runner.os != 'Windows' }}
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
       with:
@@ -477,7 +477,7 @@ runs:
         key: ${{ steps.restore-kam-linux.outputs.cache-primary-key }}
     - name: Save kam cache (Windows)
       if: ${{ always() && inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',kam,')) && steps.kam-present.outputs.present == 'true' && steps.restore-kam-windows.outputs.cache-hit != 'true' && runner.os == 'Windows' }}
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
       with:
