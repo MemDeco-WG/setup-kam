@@ -238,8 +238,8 @@ runs:
       if: ${{ inputs.require-private-key == 'true' && inputs.private-key == '' }}
       shell: bash
       run: |
-        echo "::error::KAM private key is required (require-private-key is 'true') but was not provided via 'private-key' input or secrets.KAM_PRIVATE_KEY."
-        echo "::error::Please supply the key (e.g. 'private-key: ${{ secrets.KAM_PRIVATE_KEY }}') or disable 'require-private-key'."
+        echo "::error::KAM private key is required (require-private-key is 'true') but was not provided via the 'private-key' input."
+        echo "::error::Please pass the repository secret through the 'private-key' input, or disable 'require-private-key'."
         exit 1
     - name: Preflight checks for required tools
       shell: bash
