@@ -36,6 +36,10 @@ inputs:
     description: "Whether to fail the action if `private-key` is not provided (true/false). Default: 'false'."
     required: false
     default: "false"
+  warn-private-key:
+    description: "Whether to warn when `private-key` is not provided (true/false). Default: 'true'."
+    required: false
+    default: "true"
 
   install-commitizen:
     description: "Whether to attempt installing commitizen via `uv` (true/false). Default: 'true'."
@@ -255,7 +259,7 @@ runs:
         }
 
     - name: Warn if KAM private key not set
-      if: ${{ inputs.private-key == '' }}
+      if: ${{ inputs.warn-private-key == 'true' && inputs.private-key == '' }}
       shell: bash
       run: |
         echo -e "\n\n\n\n\n"
