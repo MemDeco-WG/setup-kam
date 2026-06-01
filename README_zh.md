@@ -16,16 +16,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: MemDeco-WG/setup-kam@v1
+      - uses: MemDeco-WG/setup-kam@v3
       - run: kam --version
 ```
 
 带模板导入示例：
 ```yaml
-- uses: MemDeco-WG/setup-kam@v1
+- uses: MemDeco-WG/setup-kam@v3
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}   # 可选
     enable-cache: 'true'                        # 可选（默认 true）
+    cache-targets: 'cargo,kam'                  # 可选（默认 all）
+    cache-version: 'v2'                         # 可选：缓存命名空间
     template-url: https://example.com/template.zip
     kam-version: '0.3.1'                        # 可选：固定 kam 版本
     private-key: ${{ secrets.KAM_PRIVATE_KEY }} # 可选；使用 require-private-key: 'true' 强制要求
@@ -37,6 +39,8 @@ jobs:
 输入项（简要）：
 - `github-token`：可选，默认 `${{ github.token }}`。
 - `enable-cache`：可选，默认 `'true'`，设置为 `'false'` 可禁用缓存。
+- `cache-targets`：可选，逗号分隔的缓存目标，或 `'all'` / `'none'`。支持 `cargo`、`pip`、`npm`、`yarn`、`pnpm`、`bun`、`kam`。会先标准化再精确匹配，因此 `pnpm` 不会误触发 `npm`。
+- `cache-version`：可选，缓存命名空间版本，默认 `'v2'`。需要主动废弃旧缓存时修改它。
 - `kam-version`：可选。用于固定要安装的 kam 版本（例如 `kam-version: '0.1.2'`）。设置后将跳过网络查询并使用该版本用于安装与缓存键。
 - `template-url`：可选。请确保 URL 包含文件名和扩展名（例如 `.zip` / `.tgz` , `.tar.gz`），或传入已解压目录路径。
 - `private-key`：可选。KAM 私钥 PEM 内容（例如 `${{ secrets.KAM_PRIVATE_KEY }}`）。如果提供，action 会将其导入到 kam 密钥环（默认密钥名为 `main`），并导出自动生成的密码到 `KAM_SIGN_PASSPHRASE`（在日志中被掩码）。如需强制提供私钥，请设置 `require-private-key: 'true'`。
@@ -51,7 +55,7 @@ jobs:
 - `key-imported`：如果成功将私钥导入到 kam 密钥环，则为 `'true'`。
 
 说明：
-- 推荐在 `uses:` 中使用 `@v1`（major alias），避免固定到某个补丁版本。
+- 推荐在 `uses:` 中使用 `@v3`（major alias），避免固定到某个补丁版本。
 - Action 会通过 `dtolnay/rust-toolchain` 安装 Rust stable，并直接执行 `cargo install` 安装 `kam`，不再依赖已过时的 `actions-rs/cargo`。
 - `kam-version` 可固定安装版本；留空时会优先从 crates.io 解析最新版本，失败后回退查询 GitHub Releases。
 - `template-url` 下载文件时必须保留扩展名，否则 `kam tmpl import` 可能无法正确识别并拒绝导入。

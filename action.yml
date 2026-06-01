@@ -16,6 +16,10 @@ inputs:
     description: "Comma-separated list of cache targets to enable (or 'all'/'none'). Supported values: 'cargo','pip','npm','yarn','pnpm','bun','kam'. Default: 'all'."
     required: false
     default: "all"
+  cache-version:
+    description: "Cache namespace version. Change this to intentionally bust setup-kam caches. Default: 'v2'."
+    required: false
+    default: "v2"
   kam-version:
     description: Optional. Pin a specific kam version to install (e.g. '0.1.2'). If set, it will be used and network lookups will be skipped.
     required: false
@@ -58,70 +62,93 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Normalize cache inputs
+      id: cache-inputs
+      shell: bash
+      run: |
+        set -eu
+        raw="${{ inputs.cache-targets }}"
+        normalized=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+        case "$normalized" in
+          ""|"all")
+            targets=",all,"
+            enabled=true
+            ;;
+          "none")
+            targets=",none,"
+            enabled=false
+            ;;
+          *)
+            targets=",$normalized,"
+            enabled=true
+            ;;
+        esac
+        echo "targets=$targets" >> "$GITHUB_OUTPUT"
+        echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
     - name: Install Rust (with Cargo)
       uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
     - name: Cache Cargo & Rustup
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'cargo')) }}
+      if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',cargo,')) }}
       uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           ~/.rustup
-        key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}-${{ runner.os }}-v1
+        key: ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-rust-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-rust-cache-
+          ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-rust-
     - name: Cache pip
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'pip')) }}
+      if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',pip,')) }}
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') || github.sha }}-v1
+        key: ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-pip-${{ hashFiles('**/requirements.txt', '**/pyproject.toml', '**/uv.lock') }}
         restore-keys: |
-          ${{ runner.os }}-pip-
+          ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-pip-
     - name: Cache npm
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'npm')) }}
+      if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',npm,')) }}
       uses: actions/cache@v4
       with:
         path: |
           ~/.npm
           ~/.cache/npm
-        key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') || github.sha }}-v1
+        key: ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-npm-${{ hashFiles('**/package-lock.json', '**/npm-shrinkwrap.json') }}
         restore-keys: |
-          ${{ runner.os }}-npm-
+          ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-npm-
 
     - name: Cache Yarn
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'yarn')) }}
+      if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',yarn,')) }}
       uses: actions/cache@v4
       with:
         path: |
           ~/.cache/yarn
           ~/.yarn
-        key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') || github.sha }}-v1
+        key: ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-yarn-${{ hashFiles('**/yarn.lock') }}
         restore-keys: |
-          ${{ runner.os }}-yarn-
+          ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-yarn-
 
     - name: Cache pnpm
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'pnpm')) }}
+      if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',pnpm,')) }}
       uses: actions/cache@v4
       with:
         path: |
           ~/.pnpm-store
-        key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') || github.sha }}-v1
+        key: ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
         restore-keys: |
-          ${{ runner.os }}-pnpm-
+          ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-pnpm-
 
     - name: Cache bun
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'bun')) }}
+      if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',bun,')) }}
       uses: actions/cache@v4
       with:
         path: |
           ~/.bun
-        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') || github.sha }}-v1
+        key: ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-bun-${{ hashFiles('**/bun.lockb', '**/bun.lock') }}
         restore-keys: |
-          ${{ runner.os }}-bun-
+          ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-bun-
     - name: Setup uv
       id: setup-uv
       uses: astral-sh/setup-uv@v7
@@ -340,8 +367,8 @@ runs:
         echo "Fetched latest kam version: $LATEST_VERSION"
     - name: Restore kam cache (Linux/macOS)
       id: restore-kam-linux
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'kam')) && runner.os != 'Windows' }}
-      uses: actions/cache@v4
+      if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',kam,')) && runner.os != 'Windows' }}
+      uses: actions/cache/restore@v4
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
       with:
@@ -349,13 +376,13 @@ runs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           ~/.cargo/bin/kam
-        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
+          ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
     - name: Restore kam cache (Windows)
       id: restore-kam-windows
-      if: ${{ inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'kam')) && runner.os == 'Windows' }}
-      uses: actions/cache@v4.3.0
+      if: ${{ inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',kam,')) && runner.os == 'Windows' }}
+      uses: actions/cache/restore@v4
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
       with:
@@ -363,9 +390,9 @@ runs:
           %USERPROFILE%/.cargo/registry/cache
           %USERPROFILE%/.cargo/git/db
           %USERPROFILE%/.cargo/bin/kam.exe
-        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
+          ${{ runner.os }}-setup-kam-${{ inputs.cache-version }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
     - name: Check installed kam version and decide whether to install
       id: check-kam
       shell: bash
@@ -436,8 +463,8 @@ runs:
           echo "kam binary not found"
         fi
     - name: Save kam cache (Linux/macOS)
-      if: ${{ always() && inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'kam')) && steps.kam-present.outputs.present == 'true' && runner.os != 'Windows' }}
-      uses: actions/cache@v4
+      if: ${{ always() && inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',kam,')) && steps.kam-present.outputs.present == 'true' && steps.restore-kam-linux.outputs.cache-hit != 'true' && runner.os != 'Windows' }}
+      uses: actions/cache/save@v4
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
       with:
@@ -445,12 +472,10 @@ runs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           ~/.cargo/bin/kam
-        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
+        key: ${{ steps.restore-kam-linux.outputs.cache-primary-key }}
     - name: Save kam cache (Windows)
-      if: ${{ always() && inputs.enable-cache == 'true' && (inputs.cache-targets == 'all' || contains(inputs.cache-targets, 'kam')) && steps.kam-present.outputs.present == 'true' && runner.os == 'Windows' }}
-      uses: actions/cache@v4.3.0
+      if: ${{ always() && inputs.enable-cache == 'true' && steps.cache-inputs.outputs.enabled == 'true' && (contains(steps.cache-inputs.outputs.targets, ',all,') || contains(steps.cache-inputs.outputs.targets, ',kam,')) && steps.kam-present.outputs.present == 'true' && steps.restore-kam-windows.outputs.cache-hit != 'true' && runner.os == 'Windows' }}
+      uses: actions/cache/save@v4
       env:
         GITHUB_TOKEN: ${{ inputs.github-token || env.GITHUB_TOKEN }}
       with:
@@ -458,9 +483,7 @@ runs:
           %USERPROFILE%/.cargo/registry/cache
           %USERPROFILE%/.cargo/git/db
           %USERPROFILE%/.cargo/bin/kam.exe
-        key: ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-kam-${{ steps.get-kam-version.outputs.latest_version }}-
+        key: ${{ steps.restore-kam-windows.outputs.cache-primary-key }}
 
     - name: Import private key to keyring
       id: import-key

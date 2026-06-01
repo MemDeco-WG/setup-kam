@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup kam
-        uses: MemDeco-WG/setup-kam@v1
+        uses: MemDeco-WG/setup-kam@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           private-key: ${{ secrets.KAM_PRIVATE_KEY }}   # required
@@ -36,10 +36,12 @@ With template import and caching:
 
 ```yaml
 - name: Setup kam (with template)
-  uses: MemDeco-WG/setup-kam@v1
+  uses: MemDeco-WG/setup-kam@v3
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}        # optional (recommended)
     enable-cache: 'true'                             # optional, default true
+    cache-targets: 'cargo,kam'                       # optional, default all
+    cache-version: 'v2'                              # optional cache namespace
     template-url: https://example.com/template.zip   # optional
     kam-version: '0.3.1'                             # optional, pin version
     private-key: ${{ secrets.KAM_PRIVATE_KEY }}      # optional (see 'require-private-key' to enforce)
@@ -50,6 +52,8 @@ Inputs
 
 - `github-token` (optional): Default `${{ github.token }}`. Use this if you need authenticated access to private releases/assets.
 - `enable-cache` (optional): `'true'` (default) or `'false'` to disable caching.
+- `cache-targets` (optional): Comma-separated cache targets, or `'all'` / `'none'`. Supported values: `cargo`, `pip`, `npm`, `yarn`, `pnpm`, `bun`, `kam`. Matching is exact after normalization, so `pnpm` will not accidentally enable `npm`.
+- `cache-version` (optional): Cache namespace version. Default `'v2'`. Change it when you need to intentionally invalidate setup-kam caches.
 - `kam-version` (optional): Pin a specific kam version to install (e.g., `'0.1.2'`). When set, network lookup for the latest version is skipped and the pinned version will be used for installation and cache keys.
 - `template-url` (optional): URL to a template archive (e.g., `.zip`, `.tgz`, `.tar.gz`). The URL must include a filename and extension; if you download manually, preserve the extension or provide the extracted directory path to `kam tmpl import`.
 - `private-key` (optional): The KAM private key contents (PEM). Provide it through a repository secret, for example:
@@ -70,4 +74,4 @@ Notes
 - The action attempts to install `python-commitizen` and verifies it's callable (preferring `python -m commitizen` and falling back to `cz` if present). This behavior is controlled by `install-commitizen` and `require-commitizen` inputs; if verification fails and `require-commitizen` is `'true'`, the action will fail, otherwise it will continue with a warning.
 - The action performs preflight checks for required tools (e.g., `curl`, `openssl`, and archive utilities if `template-url` points to an archive) and will fail early with guidance if they are missing.
 - When a `private-key` is imported the action masks sensitive values and sets `KAM_SIGN_PASSPHRASE` in the environment for subsequent steps (masked in logs).
-- Prefer `uses: MemDeco-WG/setup-kam@v1` (major alias) rather than pinning patch versions for stable behavior.
+- Prefer `uses: MemDeco-WG/setup-kam@v3` (major alias) rather than pinning patch versions for stable behavior.
